@@ -131,6 +131,7 @@ void printFile(String fileName) {
 
   file.close();
 }
+
 vector<Point> readPoints() 
 {
     /* 
