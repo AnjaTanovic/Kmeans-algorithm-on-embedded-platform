@@ -18,7 +18,7 @@
 #define TEST_NUM 100		//number of test images
 #define DIM 784				//number of dimensions
 
-#define K 10
+#define K 50
 /*
 K is number of clusters (	1.option - defined as macro,
 							2.option - defined as max, for example 500
@@ -69,7 +69,8 @@ int varImgMinDist[num_per_file];					// distance to nearest cluster for variable
 
 //Arrays for centroid computation
 uint16_t nPoints[K]; 					//array for each cluster, to sum number of points for particular cluster
-double sum[DIM][K];  					//sum all coordinates for each cluster, to find center
+uint16_t **sum; 
+//double sum[DIM][K];  					//sum all coordinates for each cluster, to find center
 uint8_t previous_coor[DIM];				//used for computing new centroids
 
 int distance(uint8_t *coor1, uint8_t *coor2) {
@@ -197,6 +198,7 @@ void printFile(fs::FS &fs, char * path, uint16_t file_number) {
     while(file.available()){
         Serial.write(file.read());
     }
+	file.close();
 }
 
 void writePoints(fs::FS &fs, char * path, uint16_t file_number) {
@@ -209,11 +211,11 @@ void writePoints(fs::FS &fs, char * path, uint16_t file_number) {
         Serial.println("Failed to open file for writing");
         return;
     }
-
+			
 	// Reset file position to beginning (FILE_WRITE opens at the end of the file)
     file.seek(0);
 
-	for (uint16_t currentLine = 0; currentLine < 16; currentLine++) {
+	for (uint16_t currentLine = 0; currentLine < num_per_file; currentLine++) {
 
 		//Write label
 		file.print(varImgLabel[currentLine]);
@@ -259,6 +261,10 @@ void kMeansClustering()
 
 	int dist; 					//used for distance function
 	uint16_t clusterId;			//used for sum and nPoints arrays
+	sum = new uint16_t*[DIM];
+	for (int i = 0; i < DIM; ++i) {
+        sum[i] = new uint16_t[K];
+    }
 
 	bool changed = true;
 
@@ -351,7 +357,7 @@ void kMeansClustering()
 			{
 				sum[i][clusterId] += varImgCoor[file_point_iterator][i];
 			}
-			//point.minDist = __DBL_MAX__;  // reset distance
+			//point.minDist = __INT_MAX__;  // reset distance
 			varImgMinDist[file_point_iterator] = __INT_MAX__;
 		}
 		//update last 'num_per_file' points
@@ -367,9 +373,11 @@ void kMeansClustering()
 			for (uint16_t i = 0; i < DIM; i++)
 			{
 				previous_coor[i] = cntrCoor[c][i];
-				cntrCoor[c][i] = sum[i][c] / nPoints[c];
-				if (previous_coor[i] != cntrCoor[c][i])
-					changed = true;
+				if (nPoints[c] != 0) {
+					cntrCoor[c][i] = sum[i][c] / nPoints[c];
+					if (previous_coor[i] != cntrCoor[c][i])
+						changed = true;
+				}
 			}
 		}
 		
@@ -608,6 +616,11 @@ void mainProgram()
 	#endif
 
 	file.close();
+
+	for (int i = 0; i < DIM; ++i) {
+        delete[] sum[i];
+    }
+    delete[] sum;
 }
 
 void setup() {
