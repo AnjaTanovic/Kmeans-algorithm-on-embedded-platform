@@ -13,9 +13,10 @@
 
 #define DEBUG
 #define TEST_SEED
+#define CALC_ACC_BETWEEN_ITERATIONS
 
 #define TRAIN_NUM 1000		//number of training images
-#define TEST_NUM 1000		//number of test images
+#define TEST_NUM 10000		//number of test images
 #define DIM 196				//number of dimensions
 
 #define K 10
@@ -238,6 +239,97 @@ void writePoints(fs::FS &fs, char * path, uint16_t file_number) {
 	file.close();
 }
 
+void assignLabelToCluster()
+{
+	uint16_t label_num[K];   //contains the number of label occurence in one cluster
+	uint16_t file_iterator;
+	uint8_t file_point_iterator;	
+
+	for (uint16_t i = 0; i < K; i++)
+	{
+		//Initialization of label numbers
+		for (uint16_t j = 0; j < K; j++)
+		{
+			label_num[j] = 0;
+		}
+
+		file_iterator = 0;
+		//load first 'num_per_file' images
+		readPoints(SD_MMC, csv_train, file_iterator);
+		//Counting labels for cluster i	
+		for (uint16_t j = 0; j < n; j++)
+		{
+			file_point_iterator = j % num_per_file;	
+			if (file_point_iterator == 0 && j != 0) {
+				file_iterator++;
+				//load next 'num_per_file' images
+				readPoints(SD_MMC, csv_train, file_iterator);
+			}
+			
+			if (varImgCluster[file_point_iterator] == i)
+				label_num[varImgLabel[file_point_iterator]] += 1; 
+		}
+		
+		//The most numerous label becomes a cluster reprezentation number from range (1,10)
+		uint16_t max = label_num[0];
+		label_clust[i] = 0;
+		for (uint16_t j = 0; j < K; j++)
+		{
+			if (label_num[j] > max)
+			{
+				max = label_num[j];
+				label_clust[i] = j;
+			}
+		}
+	}
+}
+
+double calculateTrainingAccuracy()
+{
+	uint16_t total_labels = n; 		//all points have label
+	uint16_t correct_labels = 0;  	//points with correct classification
+	uint16_t file_iterator = 0;
+	uint8_t file_point_iterator;
+
+	//load first 'num_per_file' images
+	readPoints(SD_MMC, csv_train, file_iterator); 
+	for (int i = 0; i < n; i++)
+	{
+		file_point_iterator = i % num_per_file;
+		if (file_point_iterator == 0 && i != 0) {
+			file_iterator++;
+			//load next 'num_per_file' images
+			readPoints(SD_MMC, csv_train, file_iterator); 
+		}
+
+		if (varImgLabel[file_point_iterator] == label_clust[varImgCluster[file_point_iterator]])
+		{
+			correct_labels++;
+		}
+	}
+	return (double)correct_labels/(double)total_labels;
+}
+
+uint8_t predict(uint8_t point)
+{
+	//uint8_t lab;
+	int dist;
+	
+	for (uint16_t c = 0; c < K; c++) 
+	{
+		//lab = label_clust[c];
+		dist = distance(cntrCoor[c], varImgCoor[point]);
+		if (dist < varImgMinDist[point])
+		{
+			varImgMinDist[point] = dist;
+			//varImgLabel = lab;
+			varImgLabel[point] = label_clust[c]; //real label of cluster c
+		}
+	}
+
+	return varImgLabel[point];
+}
+
 void kMeansClustering()
 {
 	#ifdef DEBUG
@@ -400,99 +492,18 @@ void kMeansClustering()
 			changed = false; //ending for loop
 			break;
 		}
-	}
-	
-}
 
-void assignLabelToCluster()
-{
-	uint16_t label_num[K];   //contains the number of label occurence in one cluster
-	uint16_t file_iterator;
-	uint8_t file_point_iterator;	
-
-	for (uint16_t i = 0; i < K; i++)
-	{
-		//Initialization of label numbers
-		for (uint16_t j = 0; j < K; j++)
-		{
-			label_num[j] = 0;
-		}
-
-		file_iterator = 0;
-		//load first 'num_per_file' images
-		readPoints(SD_MMC, csv_train, file_iterator);
-		//Counting labels for cluster i	
-		for (uint16_t j = 0; j < n; j++)
-		{
-			file_point_iterator = j % num_per_file;	
-			if (file_point_iterator == 0 && j != 0) {
-				file_iterator++;
-				//load next 'num_per_file' images
-				readPoints(SD_MMC, csv_train, file_iterator);
-			}
-			
-			if (varImgCluster[file_point_iterator] == i)
-				label_num[varImgLabel[file_point_iterator]] += 1; 
-		}
+		#ifdef CALC_ACC_BETWEEN_ITERATIONS
+		assignLabelToCluster();
+		//Calculate accuracy between true labels and kmeans labels, every iteration
+		double accuracy = calculateTrainingAccuracy();
 		
-		//The most numerous label becomes a cluster reprezentation number from range (1,10)
-		uint16_t max = label_num[0];
-		label_clust[i] = 0;
-		for (uint16_t j = 0; j < K; j++)
-		{
-			if (label_num[j] > max)
-			{
-				max = label_num[j];
-				label_clust[i] = j;
-			}
-		}
+		Serial.print("* Accuracy for training set is ");
+		Serial.print(100*accuracy);
+		Serial.println("%."); 
+		#endif
 	}
-}
-
-double calculateTrainingAccuracy()
-{
-	uint16_t total_labels = n; 		//all points have label
-	uint16_t correct_labels = 0;  	//points with correct classification
-	uint16_t file_iterator = 0;
-	uint8_t file_point_iterator;
-
-	//load first 'num_per_file' images
-	readPoints(SD_MMC, csv_train, file_iterator); 
-	for (int i = 0; i < n; i++)
-	{
-		file_point_iterator = i % num_per_file;
-		if (file_point_iterator == 0 && i != 0) {
-			file_iterator++;
-			//load next 'num_per_file' images
-			readPoints(SD_MMC, csv_train, file_iterator); 
-		}
-
-		if (varImgLabel[file_point_iterator] == label_clust[varImgCluster[file_point_iterator]])
-		{
-			correct_labels++;
-		}
-	}
-	return (double)correct_labels/(double)total_labels;
-}
-
-uint8_t predict(uint8_t point)
-{
-	//uint8_t lab;
-	int dist;
 	
-	for (uint16_t c = 0; c < K; c++) 
-	{
-		//lab = label_clust[c];
-		dist = distance(cntrCoor[c], varImgCoor[point]);
-		if (dist < varImgMinDist[point])
-		{
-			varImgMinDist[point] = dist;
-			//varImgLabel = lab;
-			varImgLabel[point] = label_clust[c]; //real label of cluster c
-		}
-	}
-
-	return varImgLabel[point];
 }
 
 void mainProgram()
