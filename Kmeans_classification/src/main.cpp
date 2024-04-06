@@ -14,11 +14,11 @@
 #define DEBUG
 #define TEST_SEED
 
-#define TRAIN_NUM 100		//number of training images
-#define TEST_NUM 100		//number of test images
-#define DIM 784				//number of dimensions
+#define TRAIN_NUM 1000		//number of training images
+#define TEST_NUM 1000		//number of test images
+#define DIM 196				//number of dimensions
 
-#define K 50
+#define K 10
 /*
 K is number of clusters (	1.option - defined as macro,
 							2.option - defined as max, for example 500
@@ -34,11 +34,11 @@ EPOCHS is max number of iterations (1.option - defined as macro,
 using namespace std;
 	
 uint16_t n = 0; 					//number of points (used for both training and testing)
-const uint8_t num_per_file = 16;	//number of points stored in file
+const uint8_t num_per_file = 50;	//number of points stored in file
 /*
-Points are stored in files of 16 points per file, so
-on SD are 60000/16 = 3750 files for training, and
-10000/16 = 625 files for testing
+Points are stored in files of 50 points per file, so
+on SD are 60000/50 = 1200 files for training, and
+10000/16 = 20 files for testing
 */
 
 char csv_train[] = "/mnist_train_images/img";
@@ -606,16 +606,21 @@ void mainProgram()
 		}
 		file.print('\n');
     }
-	
+	file.close();
+
 	#ifdef DEBUG
-	file.seek(0);
-	Serial.printf("Reading result file: %s\n", csv_result);
+	file = SD_MMC.open(csv_result, FILE_READ);
+    if(!file){
+        Serial.println("Failed to open file for reading");
+        return;
+    }
+
+    Serial.printf("Reading result file: %s\n", csv_result);
     while(file.available()){
         Serial.write(file.read());
     }
-	#endif
-
 	file.close();
+	#endif
 
 	for (int i = 0; i < DIM; ++i) {
         delete[] sum[i];

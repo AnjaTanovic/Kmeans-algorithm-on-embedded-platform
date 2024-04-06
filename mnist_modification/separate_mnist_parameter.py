@@ -2,8 +2,10 @@ import csv
 import os
 import sys
 
+num_per_file = 50
+
 # Path to the MNIST CSV file
-mnist_csv_path = 'mnist/mnist_train.csv'  
+mnist_csv_path = 'mnist_resize/mnist_train_resized.csv'  
 
 # Create a directory to store the individual image files
 output_directory = 'mnist_train_images'
@@ -22,7 +24,7 @@ with open(mnist_csv_path, 'r') as csvfile:
     # Process each row in the CSV file
     for i, row in enumerate(csvreader):
     
-        if (i % 32 == 0) and (i != 0):
+        if (i % num_per_file == 0) and (i != 0):
             file_iterator = file_iterator + 1
             
         # Add two additional columns (cluster and minDistance)
