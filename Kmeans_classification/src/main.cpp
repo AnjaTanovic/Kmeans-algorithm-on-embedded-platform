@@ -19,7 +19,7 @@
 #define TEST_NUM 10000		//number of test images
 #define DIM 196				//number of dimensions
 
-#define K 200
+#define K 10
 /*
 K is number of clusters (	1.option - defined as macro,
 							2.option - defined as max, for example 500
@@ -35,11 +35,11 @@ EPOCHS is max number of iterations (1.option - defined as macro,
 using namespace std;
 	
 uint16_t n = 0; 					//number of points (used for both training and testing)
-const uint8_t num_per_file = 100;	//number of points stored in file
+const uint8_t num_per_file = 250;	//number of points stored in file
 /*
-Points are stored in files of 50 points per file, so
-on SD are 60000/50 = 1200 files for training, and
-10000/16 = 20 files for testing
+Points are stored in files of 250 points per file, so
+on SD are 60000/250 = 240 files for training, and
+10000/250 = 40 files for testing
 */
 
 char csv_train[] = "/mnist_train_images/img";
@@ -216,7 +216,7 @@ void writePoints(fs::FS &fs, char * path, uint16_t file_number) {
 	// Reset file position to beginning (FILE_WRITE opens at the end of the file)
     file.seek(0);
 
-	for (uint16_t currentLine = 0; currentLine < num_per_file; currentLine++) {
+	for (uint8_t currentLine = 0; currentLine < num_per_file; currentLine++) {
 
 		//Write label
 		file.print(varImgLabel[currentLine]);
