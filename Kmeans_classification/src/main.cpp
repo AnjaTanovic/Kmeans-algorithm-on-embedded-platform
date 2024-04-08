@@ -15,11 +15,11 @@
 #define TEST_SEED
 #define CALC_ACC_BETWEEN_ITERATIONS
 
-#define TRAIN_NUM 1000		//number of training images
+#define TRAIN_NUM 60000		//number of training images
 #define TEST_NUM 10000		//number of test images
 #define DIM 196				//number of dimensions
 
-#define K 10
+#define K 200
 /*
 K is number of clusters (	1.option - defined as macro,
 							2.option - defined as max, for example 500
@@ -35,7 +35,7 @@ EPOCHS is max number of iterations (1.option - defined as macro,
 using namespace std;
 	
 uint16_t n = 0; 					//number of points (used for both training and testing)
-const uint8_t num_per_file = 50;	//number of points stored in file
+const uint8_t num_per_file = 100;	//number of points stored in file
 /*
 Points are stored in files of 50 points per file, so
 on SD are 60000/50 = 1200 files for training, and

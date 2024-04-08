@@ -2,7 +2,7 @@ import csv
 import os
 import sys
 
-num_per_file = 50
+num_per_file = 100
 
 # Path to the MNIST CSV file
 mnist_csv_path = 'mnist_resize/mnist_train_resized.csv'  
