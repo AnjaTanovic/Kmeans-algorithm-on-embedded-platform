@@ -11,11 +11,15 @@
 #include "FS.h"
 #include "SD_MMC.h"
 
+#include "SPIFFS.h"
+
 #define DEBUG
 #define TEST_SEED
 #define CALC_ACC_BETWEEN_ITERATIONS
 
-#define TRAIN_NUM 60000		//number of training images
+#define DATASET_ON_FLASH
+
+#define TRAIN_NUM 1000		//number of training images
 #define TEST_NUM 10000		//number of test images
 #define DIM 196				//number of dimensions
 
@@ -82,18 +86,26 @@ int distance(uint8_t *coor1, uint8_t *coor2) {
     return dist;
 }
 
-void readPoints(fs::FS &fs, char * path, uint16_t file_number) {
+void readPoints(char * path, uint16_t file_number) {
 
 	//Points are always read in the same variables for image (varImgCoor[num_per_file][DIM], varImgCluster[num_per_file], 
 	//varImgLabel[num_per_file], varImgMinDist[num_per_file])
 	char new_path[50]; 
 	sprintf(new_path, "%s_%d.csv", path, (int)file_number);
 
-	File file = fs.open(new_path);
+	#ifdef DATASET_ON_FLASH
+	File file = SPIFFS.open(new_path);
     if(!file){
       Serial.println("Failed to open file for reading");
       return;
     }
+	#else
+	File file = SD_MMC.open(new_path);
+    if(!file){
+      Serial.println("Failed to open file for reading");
+      return;
+    }
+	#endif
 
 	uint8_t currentLine = 0;
     uint32_t start = 0;
@@ -122,14 +134,14 @@ void readPoints(fs::FS &fs, char * path, uint16_t file_number) {
 
 		//commaIndex = line.indexOf('\n', start);
 		varImgMinDist[currentLine] = line.substring(start, line.length()).toInt();
-
+	
 		// Increment the line counter
         currentLine++;
     }
 	file.close();
 }
 
-void readRandomPoint(fs::FS &fs, char * path, uint16_t number_of_centroid) {
+void readRandomPoint(char * path, uint16_t number_of_centroid) {
 
 	//Read random point from random file
 	uint16_t num_of_files = n/num_per_file;
@@ -144,11 +156,19 @@ void readRandomPoint(fs::FS &fs, char * path, uint16_t number_of_centroid) {
 
 	uint8_t imgNumber = rand() % num_per_file;
 
-	File file = fs.open(new_path);
+	#ifdef DATASET_ON_FLASH
+	File file = SPIFFS.open(new_path);
     if(!file){
       Serial.println("Failed to open file for reading");
       return;
     }
+	#else
+	File file = SD_MMC.open(new_path);
+    if(!file){
+      Serial.println("Failed to open file for reading");
+      return;
+    }
+	#endif
 
 	uint8_t currentLine = 0;
     uint32_t start = 0;
@@ -183,18 +203,25 @@ void readRandomPoint(fs::FS &fs, char * path, uint16_t number_of_centroid) {
 	file.close();
 }
 
-void printFile(fs::FS &fs, char * path, uint16_t file_number) {
+void printFile(char * path, uint16_t file_number) {
 
 	char new_path[50]; 
 	sprintf(new_path, "%s_%d.csv", path, (int)file_number);
 
-    File file = fs.open(new_path);
+    #ifdef DATASET_ON_FLASH
+	File file = SPIFFS.open(new_path);
     if(!file){
-        Serial.println("Failed to open file for reading");
-        return;
+      Serial.println("Failed to open file for reading");
+      return;
     }
+	#else
+	File file = SD_MMC.open(new_path);
+    if(!file){
+      Serial.println("Failed to open file for reading");
+      return;
+    }
+	#endif
 
-	
     Serial.printf("Reading file: %s\n", new_path);
     while(file.available()){
         Serial.write(file.read());
@@ -202,16 +229,24 @@ void printFile(fs::FS &fs, char * path, uint16_t file_number) {
 	file.close();
 }
 
-void writePoints(fs::FS &fs, char * path, uint16_t file_number) {
+void writePoints(char * path, uint16_t file_number) {
 
 	char new_path[50]; 
 	sprintf(new_path, "%s_%d.csv", path, (int)file_number);
 
-	File file = fs.open(new_path, FILE_WRITE);
+	#ifdef DATASET_ON_FLASH
+	File file = SPIFFS.open(new_path, FILE_WRITE);
     if(!file){
         Serial.println("Failed to open file for writing");
         return;
     }
+	#else
+	File file = SD_MMC.open(new_path, FILE_WRITE);
+    if(!file){
+        Serial.println("Failed to open file for writing");
+        return;
+    }
+	#endif
 			
 	// Reset file position to beginning (FILE_WRITE opens at the end of the file)
     file.seek(0);
@@ -255,7 +290,7 @@ void assignLabelToCluster()
 
 		file_iterator = 0;
 		//load first 'num_per_file' images
-		readPoints(SD_MMC, csv_train, file_iterator);
+		readPoints(csv_train, file_iterator);
 		//Counting labels for cluster i	
 		for (uint16_t j = 0; j < n; j++)
 		{
@@ -263,7 +298,7 @@ void assignLabelToCluster()
 			if (file_point_iterator == 0 && j != 0) {
 				file_iterator++;
 				//load next 'num_per_file' images
-				readPoints(SD_MMC, csv_train, file_iterator);
+				readPoints(csv_train, file_iterator);
 			}
 			
 			if (varImgCluster[file_point_iterator] == i)
@@ -292,14 +327,14 @@ double calculateTrainingAccuracy()
 	uint8_t file_point_iterator;
 
 	//load first 'num_per_file' images
-	readPoints(SD_MMC, csv_train, file_iterator); 
+	readPoints(csv_train, file_iterator); 
 	for (int i = 0; i < n; i++)
 	{
 		file_point_iterator = i % num_per_file;
 		if (file_point_iterator == 0 && i != 0) {
 			file_iterator++;
 			//load next 'num_per_file' images
-			readPoints(SD_MMC, csv_train, file_iterator); 
+			readPoints(csv_train, file_iterator); 
 		}
 
 		if (varImgLabel[file_point_iterator] == label_clust[varImgCluster[file_point_iterator]])
@@ -345,7 +380,7 @@ void kMeansClustering()
 
 	for (uint16_t i = 0; i < K; i++) {
 		//init centroids (random)
-		readRandomPoint(SD_MMC, csv_train, i);
+		readRandomPoint(csv_train, i);
 	}
 	#ifdef DEBUG
 		Serial.println("Centroids initialized");
@@ -377,7 +412,7 @@ void kMeansClustering()
 
 			file_iterator = 0;
 			//load first 'num_per_file' images
-			readPoints(SD_MMC, csv_train, file_iterator);
+			readPoints(csv_train, file_iterator);
 			for (uint16_t i = 0; i < n; i++) 
 			{
 				file_point_iterator = i % num_per_file;
@@ -387,13 +422,13 @@ void kMeansClustering()
 					#endif
 
 					if (update) 
-						writePoints(SD_MMC, csv_train, file_iterator); 
+						writePoints(csv_train, file_iterator); 
 
 					update = false;
 					file_iterator++;
 
 					//load next 'num_per_file' images
-					readPoints(SD_MMC, csv_train, file_iterator); 
+					readPoints(csv_train, file_iterator); 
 				}
 
 			    dist = distance(cntrCoor[c], varImgCoor[file_point_iterator]);
@@ -406,7 +441,7 @@ void kMeansClustering()
 			}
 			//update last 'num_per_file' points
 			if (update)
-				writePoints(SD_MMC, csv_train, file_iterator); 
+				writePoints(csv_train, file_iterator); 
 		}
 
 		#ifdef DEBUG
@@ -430,17 +465,17 @@ void kMeansClustering()
 		// Iterate over points to append data to centroids
 		file_iterator = 0;
 		//load first 'num_per_file' images
-		readPoints(SD_MMC, csv_train, file_iterator);
+		readPoints(csv_train, file_iterator);
 		for (uint16_t i = 0; i < n; i++) 
 		{
 			file_point_iterator = i % num_per_file;	
 			if (file_point_iterator == 0 && i != 0) {
-				writePoints(SD_MMC, csv_train, file_iterator); 
+				writePoints(csv_train, file_iterator); 
 
 				file_iterator++;
 
 				//load next 'num_per_file' images
-				readPoints(SD_MMC, csv_train, file_iterator); 
+				readPoints(csv_train, file_iterator); 
 			}
 
 			clusterId = varImgCluster[file_point_iterator];
@@ -453,7 +488,7 @@ void kMeansClustering()
 			varImgMinDist[file_point_iterator] = __INT_MAX__;
 		}
 		//update last 'num_per_file' points
-		writePoints(SD_MMC, csv_train, file_iterator); 
+		writePoints(csv_train, file_iterator); 
 
 		#ifdef DEBUG
 			Serial.println("Sum 2d array for centroids computed");
@@ -561,7 +596,7 @@ void mainProgram()
 
 	uint16_t file_iterator = 0;
 	uint8_t file_point_iterator;
-	readPoints(SD_MMC, csv_test, file_iterator);
+	readPoints(csv_test, file_iterator);
 	for (uint16_t i = 0; i < n; i++) 
 	{
 		file_point_iterator = i % num_per_file;
@@ -574,7 +609,7 @@ void mainProgram()
 			file_iterator++;
 
 			//load next 'num_per_file' images
-			readPoints(SD_MMC, csv_test, file_iterator);
+			readPoints(csv_test, file_iterator);
 		}
 
 		
@@ -597,11 +632,20 @@ void mainProgram()
 	
 	sprintf(csv_result, "%s_k%d.csv", csv_result_path, K); 
 
+	#ifdef DATASET_ON_FLASH
+	File file = SPIFFS.open(csv_result, FILE_WRITE);
+    if(!file){
+        Serial.println("Failed to open file for writing");
+        return;
+    }
+	#else
 	File file = SD_MMC.open(csv_result, FILE_WRITE);
     if(!file){
         Serial.println("Failed to open file for writing");
         return;
     }
+	#endif
+	
 	// Reset file position to beginning (FILE_WRITE opens at the end of the file)
     file.seek(0);
 
@@ -620,11 +664,19 @@ void mainProgram()
 	file.close();
 
 	#ifdef DEBUG
+	#ifdef DATASET_ON_FLASH
+	file = SPIFFS.open(csv_result, FILE_READ);
+    if(!file){
+        Serial.println("Failed to open file for reading");
+        return;
+    }
+	#else
 	file = SD_MMC.open(csv_result, FILE_READ);
     if(!file){
         Serial.println("Failed to open file for reading");
         return;
     }
+	#endif
 
     Serial.printf("Reading result file: %s\n", csv_result);
     while(file.available()){
@@ -646,6 +698,14 @@ void setup() {
   
   	Serial.println("Hello from esp32!");
 
+
+	#ifdef DATASET_ON_FLASH
+	//Init file system
+	if(!SPIFFS.begin(true)){
+		Serial.println("An Error has occurred while mounting SPIFFS");
+		return;
+	}
+	#else
 	//Init SD card
   	if(!SD_MMC.begin()){
 		Serial.println("Card Mount Failed");
@@ -671,8 +731,9 @@ void setup() {
 	}
 	*/
 
-    uint64_t cardSize = SD_MMC.cardSize() / (1024 * 1024);
+	uint64_t cardSize = SD_MMC.cardSize() / (1024 * 1024);
     Serial.printf("SD_MMC Card Size: %lluMB\n", cardSize);
+	#endif
 
 	mainProgram();
 }
