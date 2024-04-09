@@ -86,61 +86,6 @@ int distance(uint8_t *coor1, uint8_t *coor2) {
     return dist;
 }
 
-void readPoints(char * path, uint16_t file_number) {
-
-	//Points are always read in the same variables for image (varImgCoor[num_per_file][DIM], varImgCluster[num_per_file], 
-	//varImgLabel[num_per_file], varImgMinDist[num_per_file])
-	char new_path[50]; 
-	sprintf(new_path, "%s_%d.csv", path, (int)file_number);
-
-	#ifdef DATASET_ON_FLASH
-	File file = SPIFFS.open(new_path);
-    if(!file){
-      Serial.println("Failed to open file for reading");
-      return;
-    }
-	#else
-	File file = SD_MMC.open(new_path);
-    if(!file){
-      Serial.println("Failed to open file for reading");
-      return;
-    }
-	#endif
-
-	uint8_t currentLine = 0;
-    uint32_t start = 0;
-    uint32_t commaIndex;
-
-	String line; 
-
-    while (file.available()) {
-        line = file.readStringUntil('\n');
-
-		//Read line
-		start = 0;
-		commaIndex = line.indexOf(',', start);
-		varImgLabel[currentLine] = (uint8_t)(line.substring(start, commaIndex).toInt());
-		start = commaIndex + 1;
-
-		for (uint16_t i = 0; i < DIM; i++) {
-			commaIndex = line.indexOf(',', start);
-			varImgCoor[currentLine][i] = (uint8_t)(line.substring(start, commaIndex).toInt());
-			start = commaIndex + 1;
-		}
-
-		commaIndex = line.indexOf(',', start);
-		varImgCluster[currentLine] = (uint16_t)(line.substring(start, commaIndex).toInt());
-		start = commaIndex + 1;
-
-		//commaIndex = line.indexOf('\n', start);
-		varImgMinDist[currentLine] = line.substring(start, line.length()).toInt();
-	
-		// Increment the line counter
-        currentLine++;
-    }
-	file.close();
-}
-
 void readRandomPoint(char * path, uint16_t number_of_centroid) {
 
 	//Read random point from random file
@@ -176,7 +121,8 @@ void readRandomPoint(char * path, uint16_t number_of_centroid) {
 
 	String line; 
 
-    while (file.available()) {
+	for (uint8_t currentLine = 0; currentLine < num_per_file; currentLine++) {
+    //while (file.available()) {
         line = file.readStringUntil('\n');
 		if (currentLine == imgNumber) {
 			
@@ -196,19 +142,18 @@ void readRandomPoint(char * path, uint16_t number_of_centroid) {
 	
 			break;
 		}
-
-		// Increment the line counter
-        currentLine++;
     }
 	file.close();
 }
 
-void printFile(char * path, uint16_t file_number) {
+void readPoints(char * path, uint16_t file_number) {
 
+	//Points are always read in the same variables for image (varImgCoor[num_per_file][DIM], varImgCluster[num_per_file], 
+	//varImgLabel[num_per_file], varImgMinDist[num_per_file])
 	char new_path[50]; 
 	sprintf(new_path, "%s_%d.csv", path, (int)file_number);
 
-    #ifdef DATASET_ON_FLASH
+	#ifdef DATASET_ON_FLASH
 	File file = SPIFFS.open(new_path);
     if(!file){
       Serial.println("Failed to open file for reading");
@@ -222,9 +167,34 @@ void printFile(char * path, uint16_t file_number) {
     }
 	#endif
 
-    Serial.printf("Reading file: %s\n", new_path);
-    while(file.available()){
-        Serial.write(file.read());
+	//uint8_t currentLine = 0;
+    uint32_t start = 0;
+    uint32_t commaIndex;
+
+	String line; 
+
+	for (uint8_t currentLine = 0; currentLine < num_per_file; currentLine++) {
+    //while (file.available()) {
+        line = file.readStringUntil('\n');
+
+		//Read line
+		start = 0;
+		commaIndex = line.indexOf(',', start);
+		varImgLabel[currentLine] = (uint8_t)(line.substring(start, commaIndex).toInt());
+		start = commaIndex + 1;
+
+		for (uint16_t i = 0; i < DIM; i++) {
+			commaIndex = line.indexOf(',', start);
+			varImgCoor[currentLine][i] = (uint8_t)(line.substring(start, commaIndex).toInt());
+			start = commaIndex + 1;
+		}
+
+		commaIndex = line.indexOf(',', start);
+		varImgCluster[currentLine] = (uint16_t)(line.substring(start, commaIndex).toInt());
+		start = commaIndex + 1;
+
+		//commaIndex = line.indexOf('\n', start);
+		varImgMinDist[currentLine] = line.substring(start, line.length()).toInt();
     }
 	file.close();
 }
@@ -252,7 +222,7 @@ void writePoints(char * path, uint16_t file_number) {
     file.seek(0);
 
 	for (uint8_t currentLine = 0; currentLine < num_per_file; currentLine++) {
-
+	
 		//Write label
 		file.print(varImgLabel[currentLine]);
 		file.print(',');
@@ -270,6 +240,32 @@ void writePoints(char * path, uint16_t file_number) {
 		//Write min distance
 		file.print(varImgMinDist[currentLine]);
 		file.print('\n');
+    }
+	file.close();
+}
+
+void printFile(char * path, uint16_t file_number) {
+
+	char new_path[50]; 
+	sprintf(new_path, "%s_%d.csv", path, (int)file_number);
+
+    #ifdef DATASET_ON_FLASH
+	File file = SPIFFS.open(new_path);
+    if(!file){
+      Serial.println("Failed to open file for reading");
+      return;
+    }
+	#else
+	File file = SD_MMC.open(new_path);
+    if(!file){
+      Serial.println("Failed to open file for reading");
+      return;
+    }
+	#endif
+
+    Serial.printf("Reading file: %s\n", new_path);
+    while(file.available()){
+        Serial.write(file.read());
     }
 	file.close();
 }
@@ -304,7 +300,7 @@ void assignLabelToCluster()
 			if (varImgCluster[file_point_iterator] == i)
 				label_num[varImgLabel[file_point_iterator]] += 1; 
 		}
-		
+
 		//The most numerous label becomes a cluster reprezentation number from range (1,10)
 		uint16_t max = label_num[0];
 		label_clust[i] = 0;
@@ -342,6 +338,7 @@ double calculateTrainingAccuracy()
 			correct_labels++;
 		}
 	}
+
 	return (double)correct_labels/(double)total_labels;
 }
 
@@ -417,9 +414,6 @@ void kMeansClustering()
 			{
 				file_point_iterator = i % num_per_file;
 				if (file_point_iterator == 0 && i != 0) {
-					#ifdef DEBUG
-					//printFile(SD_MMC, csv_train, file_iterator); 
-					#endif
 
 					if (update) 
 						writePoints(csv_train, file_iterator); 
