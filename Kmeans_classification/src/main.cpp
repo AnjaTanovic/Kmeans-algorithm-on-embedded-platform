@@ -138,6 +138,7 @@ void readRandomPoint(char * path, uint16_t number_of_centroid) {
 			}
 
 			commaIndex = line.indexOf(',', start);
+			//this is never used, array can be deleted
 			cntrCluster[number_of_centroid] = (uint16_t)(line.substring(start, commaIndex).toInt());
 	
 			break;
