@@ -17,7 +17,7 @@
 #define TEST_SEED
 #define CALC_ACC_BETWEEN_ITERATIONS
 
-#define DATASET_ON_FLASH
+//#define DATASET_ON_FLASH
 
 #define TRAIN_NUM 1000		//number of training images
 #define TEST_NUM 10000		//number of test images
@@ -39,15 +39,18 @@ EPOCHS is max number of iterations (1.option - defined as macro,
 using namespace std;
 	
 uint16_t n = 0; 					//number of points (used for both training and testing)
-const uint8_t num_per_file = 250;	//number of points stored in file
+const uint8_t num_of_points_per_file = 250;	//number of points stored in file
+//const uint16_t num_of_bytes_per_point = 1 + DIM + 1 + 4;  	//number of bytes per point (1 for label, 
+															//DIM for img pixels, 1 for cluster, 
+															//4 for min Dist) 
 /*
 Points are stored in files of 250 points per file, so
 on SD are 60000/250 = 240 files for training, and
 10000/250 = 40 files for testing
 */
 
-char csv_train[] = "/mnist_train_images/img";
-char csv_test[] = "/mnist_test_images/img";
+char bin_train[] = "/mnist_train_images/img";
+char bin_test[] = "/mnist_test_images/img";
 const char csv_result_path[] = "/result";
 char csv_result[50]; 
 
@@ -63,14 +66,14 @@ int imgMinDist[TRAIN_NUM];				// distance to nearest cluster for every image, de
 
 //CENTROID arrays
 uint8_t cntrCoor[K][DIM];				// coordinates for every image (2d array) 
-uint16_t cntrCluster[K];				// nearest cluster for every image, no default cluster (default is -1, which is 65535)
+uint8_t cntrCluster[K];				// nearest cluster for every image, no default cluster (default is -1, which is 65535)
 uint8_t cntrLabel[K];					// label from csv file for every image
 
 //Variable image point
-uint8_t varImgCoor[num_per_file][DIM];				// coordinates for image 
-uint16_t varImgCluster[num_per_file];				// nearest cluster for variable image, no default cluster
-uint8_t varImgLabel[num_per_file];					// label from csv file for variable image
-int varImgMinDist[num_per_file];					// distance to nearest cluster for variable image, default infinite
+uint8_t varImgCoor[num_of_points_per_file][DIM];				// coordinates for image 
+uint8_t varImgCluster[num_of_points_per_file];				// nearest cluster for variable image, no default cluster
+uint8_t varImgLabel[num_of_points_per_file];					// label from csv file for variable image
+int varImgMinDist[num_of_points_per_file];					// distance to nearest cluster for variable image, default infinite
 
 //Arrays for centroid computation
 uint16_t nPoints[K]; 					//array for each cluster, to sum number of points for particular cluster
@@ -86,20 +89,20 @@ int distance(uint8_t *coor1, uint8_t *coor2) {
     return dist;
 }
 
-void readRandomPoint(char * path, uint16_t number_of_centroid) {
+void readRandomPoint(char * path, uint8_t number_of_centroid) {
 
 	//Read random point from random file
-	uint16_t num_of_files = n/num_per_file;
+	uint16_t num_of_files = n/num_of_points_per_file;
 
 	char new_path[50]; 
-	sprintf(new_path, "%s_%d.csv", path, (int)(rand() % num_of_files));
+	sprintf(new_path, "%s_%d.bin", path, (int)(rand() % num_of_files));
 
 	#ifdef DEBUG
 	Serial.print("Random point ");
 	Serial.println(new_path);
 	#endif
 
-	uint8_t imgNumber = rand() % num_per_file;
+	uint8_t imgNumber = rand() % num_of_points_per_file;
 
 	#ifdef DATASET_ON_FLASH
 	File file = SPIFFS.open(new_path);
@@ -115,44 +118,32 @@ void readRandomPoint(char * path, uint16_t number_of_centroid) {
     }
 	#endif
 
-	uint8_t currentLine = 0;
-    uint32_t start = 0;
-    uint32_t commaIndex;
+	//iterate over 1 file with 'num_of_points_per_file' points, and find random point
+	for (uint16_t currentPoint = 0; currentPoint < num_of_points_per_file; currentPoint++) {
+		if (currentPoint == imgNumber) {
+				//read label
+				cntrLabel[number_of_centroid] = (uint8_t)file.read();
 
-	String line; 
+				//read coordinates
+				for (uint16_t i = 0; i < DIM; i++) {
+					cntrCoor[number_of_centroid][i] = (uint8_t)file.read();
+				}
 
-	for (uint8_t currentLine = 0; currentLine < num_per_file; currentLine++) {
-    //while (file.available()) {
-        line = file.readStringUntil('\n');
-		if (currentLine == imgNumber) {
-			
-			//Read line
-			commaIndex = line.indexOf(',', start);
-			cntrLabel[number_of_centroid] = (uint8_t)(line.substring(start, commaIndex).toInt());
-			start = commaIndex + 1;
-
-			for (uint16_t i = 0; i < DIM; i++) {
-				commaIndex = line.indexOf(',', start);
-				cntrCoor[number_of_centroid][i] = (uint8_t)(line.substring(start, commaIndex).toInt());
-				start = commaIndex + 1;
-			}
-
-			commaIndex = line.indexOf(',', start);
-			//this is never used, array can be deleted
-			cntrCluster[number_of_centroid] = (uint16_t)(line.substring(start, commaIndex).toInt());
-	
+				//read cluster
+				cntrCluster[number_of_centroid] = (uint8_t)file.read();
 			break;
 		}
-    }
+	}
+
 	file.close();
 }
 
 void readPoints(char * path, uint16_t file_number) {
 
-	//Points are always read in the same variables for image (varImgCoor[num_per_file][DIM], varImgCluster[num_per_file], 
-	//varImgLabel[num_per_file], varImgMinDist[num_per_file])
+	//Points are always read in the same variables for image (varImgCoor[num_of_points_per_file][DIM], varImgCluster[num_of_points_per_file], 
+	//varImgLabel[num_of_points_per_file], varImgMinDist[num_of_points_per_file])
 	char new_path[50]; 
-	sprintf(new_path, "%s_%d.csv", path, (int)file_number);
+	sprintf(new_path, "%s_%d.bin", path, (int)file_number);
 
 	#ifdef DATASET_ON_FLASH
 	File file = SPIFFS.open(new_path);
@@ -168,42 +159,34 @@ void readPoints(char * path, uint16_t file_number) {
     }
 	#endif
 
-	//uint8_t currentLine = 0;
-    uint32_t start = 0;
-    uint32_t commaIndex;
+	//iterate over 1 file with 'num_of_points_per_file' points
+	for (uint16_t currentPoint = 0; currentPoint < num_of_points_per_file; currentPoint++) {
+			//read label
+			varImgLabel[currentPoint] = (uint8_t)file.read();
 
-	String line; 
+			//read coordinates
+			for (uint16_t i = 0; i < DIM; i++) {
+				varImgCoor[currentPoint][i] = (uint8_t)file.read();
+			}
 
-	for (uint8_t currentLine = 0; currentLine < num_per_file; currentLine++) {
-    //while (file.available()) {
-        line = file.readStringUntil('\n');
+			//read cluster
+			varImgCluster[currentPoint] = (uint8_t)file.read();
 
-		//Read line
-		start = 0;
-		commaIndex = line.indexOf(',', start);
-		varImgLabel[currentLine] = (uint8_t)(line.substring(start, commaIndex).toInt());
-		start = commaIndex + 1;
+			//read minDist (4 bytes)
+			varImgMinDist[currentPoint] = 0;
+			for (int8_t i = 3; i >= 0; i--) {
+				uint8_t byteRead = (uint8_t)file.read();
+				varImgMinDist[currentPoint] |= (byteRead << (i * 8));
+			}
+	}
 
-		for (uint16_t i = 0; i < DIM; i++) {
-			commaIndex = line.indexOf(',', start);
-			varImgCoor[currentLine][i] = (uint8_t)(line.substring(start, commaIndex).toInt());
-			start = commaIndex + 1;
-		}
-
-		commaIndex = line.indexOf(',', start);
-		varImgCluster[currentLine] = (uint16_t)(line.substring(start, commaIndex).toInt());
-		start = commaIndex + 1;
-
-		//commaIndex = line.indexOf('\n', start);
-		varImgMinDist[currentLine] = line.substring(start, line.length()).toInt();
-    }
 	file.close();
 }
 
 void writePoints(char * path, uint16_t file_number) {
 
 	char new_path[50]; 
-	sprintf(new_path, "%s_%d.csv", path, (int)file_number);
+	sprintf(new_path, "%s_%d.bin", path, (int)file_number);
 
 	#ifdef DATASET_ON_FLASH
 	File file = SPIFFS.open(new_path, FILE_WRITE);
@@ -222,26 +205,26 @@ void writePoints(char * path, uint16_t file_number) {
 	// Reset file position to beginning (FILE_WRITE opens at the end of the file)
     file.seek(0);
 
-	for (uint8_t currentLine = 0; currentLine < num_per_file; currentLine++) {
-	
-		//Write label
-		file.print(varImgLabel[currentLine]);
-		file.print(',');
+	//iterate over 1 file with 'num_of_points_per_file' points
+	for (uint16_t currentPoint = 0; currentPoint < num_of_points_per_file; currentPoint++) {
+			//write label
+			file.write(varImgLabel[currentPoint]);
 
-		//Write coordinates
-		for (uint16_t i = 0; i < DIM; i++) {
-			file.print(varImgCoor[currentLine][i]);
-			file.print(',');
-		}
+			//write coordinates
+			for (uint16_t i = 0; i < DIM; i++) {
+				file.write(varImgCoor[currentPoint][i]);
+			}
 
-		//Write cluster
-		file.print(varImgCluster[currentLine]);
-		file.print(',');
+			//write cluster
+			file.write(varImgCluster[currentPoint]);
 
-		//Write min distance
-		file.print(varImgMinDist[currentLine]);
-		file.print('\n');
-    }
+			//write minDist (4 bytes)
+			file.write((uint8_t)(varImgMinDist[currentPoint] >> 24)); // Write the most significant byte
+			file.write((uint8_t)(varImgMinDist[currentPoint] >> 16)); // Write the next most significant byte
+			file.write((uint8_t)(varImgMinDist[currentPoint] >> 8));  // Write the next least significant byte
+			file.write((uint8_t)varImgMinDist[currentPoint]);  
+	}
+
 	file.close();
 }
 
@@ -277,25 +260,25 @@ void assignLabelToCluster()
 	uint16_t file_iterator;
 	uint8_t file_point_iterator;	
 
-	for (uint16_t i = 0; i < K; i++)
+	for (uint8_t i = 0; i < K; i++)
 	{
 		//Initialization of label numbers
-		for (uint16_t j = 0; j < K; j++)
+		for (uint8_t j = 0; j < K; j++)
 		{
 			label_num[j] = 0;
 		}
 
 		file_iterator = 0;
-		//load first 'num_per_file' images
-		readPoints(csv_train, file_iterator);
+		//load first 'num_of_points_per_file' images
+		readPoints(bin_train, file_iterator);
 		//Counting labels for cluster i	
 		for (uint16_t j = 0; j < n; j++)
 		{
-			file_point_iterator = j % num_per_file;	
+			file_point_iterator = j % num_of_points_per_file;	
 			if (file_point_iterator == 0 && j != 0) {
 				file_iterator++;
-				//load next 'num_per_file' images
-				readPoints(csv_train, file_iterator);
+				//load next 'num_of_points_per_file' images
+				readPoints(bin_train, file_iterator);
 			}
 			
 			if (varImgCluster[file_point_iterator] == i)
@@ -305,7 +288,7 @@ void assignLabelToCluster()
 		//The most numerous label becomes a cluster reprezentation number from range (1,10)
 		uint16_t max = label_num[0];
 		label_clust[i] = 0;
-		for (uint16_t j = 0; j < K; j++)
+		for (uint8_t j = 0; j < K; j++)
 		{
 			if (label_num[j] > max)
 			{
@@ -323,15 +306,15 @@ double calculateTrainingAccuracy()
 	uint16_t file_iterator = 0;
 	uint8_t file_point_iterator;
 
-	//load first 'num_per_file' images
-	readPoints(csv_train, file_iterator); 
+	//load first 'num_of_points_per_file' images
+	readPoints(bin_train, file_iterator); 
 	for (int i = 0; i < n; i++)
 	{
-		file_point_iterator = i % num_per_file;
+		file_point_iterator = i % num_of_points_per_file;
 		if (file_point_iterator == 0 && i != 0) {
 			file_iterator++;
-			//load next 'num_per_file' images
-			readPoints(csv_train, file_iterator); 
+			//load next 'num_of_points_per_file' images
+			readPoints(bin_train, file_iterator); 
 		}
 
 		if (varImgLabel[file_point_iterator] == label_clust[varImgCluster[file_point_iterator]])
@@ -348,7 +331,7 @@ uint8_t predict(uint8_t point)
 	//uint8_t lab;
 	int dist;
 	
-	for (uint16_t c = 0; c < K; c++) 
+	for (uint8_t c = 0; c < K; c++) 
 	{
 		//lab = label_clust[c];
 		dist = distance(cntrCoor[c], varImgCoor[point]);
@@ -376,16 +359,16 @@ void kMeansClustering()
 	srand(time(0));  //set the random seed
 	#endif
 
-	for (uint16_t i = 0; i < K; i++) {
+	for (uint8_t i = 0; i < K; i++) {
 		//init centroids (random)
-		readRandomPoint(csv_train, i);
+		readRandomPoint(bin_train, i);
 	}
 	#ifdef DEBUG
 		Serial.println("Centroids initialized");
 	#endif
 
 	int dist; 					//used for distance function
-	uint16_t clusterId;			//used for sum and nPoints arrays
+	uint8_t clusterId;			//used for sum and nPoints arrays
 	sum = new uint16_t*[DIM];
 	for (int i = 0; i < DIM; ++i) {
         sum[i] = new uint16_t[K];
@@ -401,7 +384,7 @@ void kMeansClustering()
 	{
 		changed = false;
 		
-		for (uint16_t c = 0; c < K; c++) 
+		for (uint8_t c = 0; c < K; c++) 
 		{
 			#ifdef DEBUG
 				Serial.print("Calculating for centroid number ");
@@ -409,21 +392,21 @@ void kMeansClustering()
 			#endif
 
 			file_iterator = 0;
-			//load first 'num_per_file' images
-			readPoints(csv_train, file_iterator);
+			//load first 'num_of_points_per_file' images
+			readPoints(bin_train, file_iterator);
 			for (uint16_t i = 0; i < n; i++) 
 			{
-				file_point_iterator = i % num_per_file;
+				file_point_iterator = i % num_of_points_per_file;
 				if (file_point_iterator == 0 && i != 0) {
 
 					if (update) 
-						writePoints(csv_train, file_iterator); 
+						writePoints(bin_train, file_iterator); 
 
 					update = false;
 					file_iterator++;
 
-					//load next 'num_per_file' images
-					readPoints(csv_train, file_iterator); 
+					//load next 'num_of_points_per_file' images
+					readPoints(bin_train, file_iterator); 
 				}
 
 			    dist = distance(cntrCoor[c], varImgCoor[file_point_iterator]);
@@ -434,9 +417,9 @@ void kMeansClustering()
 					update = true;
 			    }
 			}
-			//update last 'num_per_file' points
+			//update last 'num_of_points_per_file' points
 			if (update)
-				writePoints(csv_train, file_iterator); 
+				writePoints(bin_train, file_iterator); 
 		}
 
 		#ifdef DEBUG
@@ -444,7 +427,7 @@ void kMeansClustering()
 		#endif
 
 		// Initialize nPoints and sum with zeroes
-		for (uint16_t j = 0; j < K; ++j) 
+		for (uint8_t j = 0; j < K; ++j) 
 		{
 			nPoints[j] = 0;
 			for (uint16_t i = 0; i < DIM; i++)
@@ -459,18 +442,19 @@ void kMeansClustering()
 
 		// Iterate over points to append data to centroids
 		file_iterator = 0;
-		//load first 'num_per_file' images
-		readPoints(csv_train, file_iterator);
+		//load first 'num_of_points_per_file' images
+		readPoints(bin_train, file_iterator);
+		
 		for (uint16_t i = 0; i < n; i++) 
 		{
-			file_point_iterator = i % num_per_file;	
+			file_point_iterator = i % num_of_points_per_file;	
 			if (file_point_iterator == 0 && i != 0) {
-				writePoints(csv_train, file_iterator); 
+				writePoints(bin_train, file_iterator); 
 
 				file_iterator++;
 
-				//load next 'num_per_file' images
-				readPoints(csv_train, file_iterator); 
+				//load next 'num_of_points_per_file' images
+				readPoints(bin_train, file_iterator); 
 			}
 
 			clusterId = varImgCluster[file_point_iterator];
@@ -482,15 +466,15 @@ void kMeansClustering()
 			//point.minDist = __INT_MAX__;  // reset distance
 			varImgMinDist[file_point_iterator] = __INT_MAX__;
 		}
-		//update last 'num_per_file' points
-		writePoints(csv_train, file_iterator); 
+		//update last 'num_of_points_per_file' points
+		writePoints(bin_train, file_iterator); 
 
 		#ifdef DEBUG
 			Serial.println("Sum 2d array for centroids computed");
 		#endif
 
 		// Compute the new centroids using sum arrays
-		for (uint16_t c = 0; c < K; c++) 
+		for (uint8_t c = 0; c < K; c++) 
 		{
 			for (uint16_t i = 0; i < DIM; i++)
 			{
@@ -591,10 +575,10 @@ void mainProgram()
 
 	uint16_t file_iterator = 0;
 	uint8_t file_point_iterator;
-	readPoints(csv_test, file_iterator);
+	readPoints(bin_test, file_iterator);
 	for (uint16_t i = 0; i < n; i++) 
 	{
-		file_point_iterator = i % num_per_file;
+		file_point_iterator = i % num_of_points_per_file;
 		if (file_point_iterator == 0 && i != 0) {
 			#ifdef DEBUG
 			Serial.print("Testing for file ");
@@ -603,8 +587,8 @@ void mainProgram()
 			
 			file_iterator++;
 
-			//load next 'num_per_file' images
-			readPoints(csv_test, file_iterator);
+			//load next 'num_of_points_per_file' images
+			readPoints(bin_test, file_iterator);
 		}
 
 		
@@ -644,7 +628,7 @@ void mainProgram()
 	// Reset file position to beginning (FILE_WRITE opens at the end of the file)
     file.seek(0);
 
-	for (uint16_t c = 0; c < K; c++) {
+	for (uint8_t c = 0; c < K; c++) {
 
 		//Write label
 		file.print(label_clust[c]);

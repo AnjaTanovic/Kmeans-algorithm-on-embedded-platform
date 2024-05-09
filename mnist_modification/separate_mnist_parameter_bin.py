@@ -30,8 +30,8 @@ with open(mnist_csv_path, 'r') as csvfile:
         # Convert pixel values to bytes
         pixel_bytes = bytes([int(pixel) for pixel in row])
         
-        # Add two additional bytes (-1 and 32-bit max integer)
-        additional_bytes = b'\xff' + max_int_32bit.to_bytes(4, byteorder='big')
+        # Add two additional bytes (-1 for cluster and 32-bit max integer for minDist)
+        additional_bytes = b'\xFF' + b'\x7F' + b'\xFF' * 3
         
         # Save the pixel bytes to a binary file
         binary_filename = f'img_{file_iterator}.bin'
