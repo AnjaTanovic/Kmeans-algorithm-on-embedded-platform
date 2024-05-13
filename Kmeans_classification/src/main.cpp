@@ -15,9 +15,9 @@
 
 #define DEBUG
 #define TEST_SEED
-#define CALC_ACC_BETWEEN_ITERATIONS
+//#define CALC_ACC_BETWEEN_ITERATIONS
 
-//#define DATASET_ON_FLASH
+#define DATASET_ON_FLASH
 
 #define TRAIN_NUM 1000		//number of training images
 #define TEST_NUM 10000		//number of test images
@@ -132,6 +132,11 @@ void readRandomPoint(char * path, uint8_t number_of_centroid) {
 				//read cluster
 				cntrCluster[number_of_centroid] = (uint8_t)file.read();
 			break;
+		}
+		else {
+			//dummy read current point
+			for (int i = 0; i < (1+DIM+1+4); i++)
+				file.read();
 		}
 	}
 
@@ -567,6 +572,7 @@ void mainProgram()
 	Serial.print(100*accuracy);
 	Serial.println("%."); 
 
+	#ifndef DATASET_ON_FLASH
 	//Testing
 	n = TEST_NUM;
 	uint8_t predicted_number;
@@ -603,6 +609,7 @@ void mainProgram()
 	Serial.print("* Accuracy for test set is ");
   	Serial.print(100*accuracy);
   	Serial.println("%."); 
+	#endif
 	
 	//Store results
 	#ifdef DEBUG
