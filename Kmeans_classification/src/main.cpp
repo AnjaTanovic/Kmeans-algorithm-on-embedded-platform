@@ -15,7 +15,7 @@
 
 #define DEBUG
 #define TEST_SEED
-//#define CALC_ACC_BETWEEN_ITERATIONS
+#define CALC_ACC_BETWEEN_ITERATIONS
 
 #define DATASET_ON_FLASH
 
@@ -170,9 +170,12 @@ void readPoints(char * path, uint16_t file_number) {
 			varImgLabel[currentPoint] = (uint8_t)file.read();
 
 			//read coordinates
+			/*
 			for (uint16_t i = 0; i < DIM; i++) {
 				varImgCoor[currentPoint][i] = (uint8_t)file.read();
 			}
+			*/
+			file.readBytes((char *)varImgCoor[currentPoint], DIM);
 
 			//read cluster
 			varImgCluster[currentPoint] = (uint8_t)file.read();
