@@ -42,17 +42,16 @@ EPOCHS is max number of iterations (1.option - defined as macro,
 	
 uint16_t n = 0; 					//number of points (used for both training and testing)
 #define NUM_OF_POINTS_PER_FILE 250	//number of points stored in file
-//const uint16_t num_of_bytes_per_point = 1 + DIM + 1 + 4;  	//number of bytes per point (1 for label, 
-															//DIM for img pixels, 1 for cluster, 
-															//4 for min Dist) 
+//const uint16_t num_of_bytes_per_point = 1 + DIM + 1;  	//number of bytes per point (1 for label, 
+															//DIM for img pixels, 1 for cluster) 
 /*
 Points are stored in files of 250 points per file, so
 on SD are 60000/250 = 240 files for training, and
 10000/250 = 40 files for testing
 */
 
-char bin_train[] = "/mnist_train_images/img";
-char bin_test[] = "/mnist_test_images/img";
+char bin_train[] = "/img";
+char bin_test[] = "/test/img";
 const char csv_result_path[] = "/result";
 char csv_result[50]; 
 
@@ -75,7 +74,6 @@ uint8_t cntrLabel[K];					// label from csv file for every image
 uint8_t varImgCoor[NUM_OF_POINTS_PER_FILE][DIM];				// coordinates for image 
 uint8_t varImgCluster[NUM_OF_POINTS_PER_FILE];				// nearest cluster for variable image, no default cluster
 uint8_t varImgLabel[NUM_OF_POINTS_PER_FILE];					// label from csv file for variable image
-int varImgMinDist[NUM_OF_POINTS_PER_FILE];					// distance to nearest cluster for variable image, default infinite
 
 //Arrays for centroid computation
 uint16_t nPoints[K]; 					//array for each cluster, to sum number of points for particular cluster
@@ -136,7 +134,7 @@ void readRandomPoint(char * path, uint8_t number_of_centroid) {
 		}
 		else {
 			// Seek ahead in the file by a certain number of bytes (whole point)
-			fseek(f, 1 + DIM + 1 + 4, SEEK_CUR);
+			fseek(f, 1 + DIM + 1, SEEK_CUR);
 		}
 	}
 
@@ -146,7 +144,7 @@ void readRandomPoint(char * path, uint8_t number_of_centroid) {
 void readPoints(char * path, uint16_t file_number) {
 
 	//Points are always read in the same variables for image (varImgCoor[NUM_OF_POINTS_PER_FILE][DIM], varImgCluster[NUM_OF_POINTS_PER_FILE], 
-	//varImgLabel[NUM_OF_POINTS_PER_FILE], varImgMinDist[NUM_OF_POINTS_PER_FILE])
+	//varImgLabel[NUM_OF_POINTS_PER_FILE])
 	char new_path[50]; 
 	sprintf(new_path, "/spiffs%s_%d.bin", path, (int)file_number);
 
@@ -175,21 +173,12 @@ void readPoints(char * path, uint16_t file_number) {
 			//read cluster
 			fread(&varImgCluster[currentPoint], 1, 1, f);
 
-			//read minDist (4 bytes)
-			varImgMinDist[currentPoint] = 0;
-			uint8_t byteRead;
-			for (int8_t i = 3; i >= 0; i--) {
-				fread(&byteRead, 1, 1, f);
-				varImgMinDist[currentPoint] |= (byteRead << (i * 8));
-			}
-
 		/*	if (calc) {
 			printf("Point %d: ", currentPoint);
 			printf("%d ", varImgLabel[currentPoint]);
 			for (int i = 0 ; i < DIM; i++)
 				printf("%d ", varImgCoor[currentPoint][i]);
 			printf("%d ", varImgCluster[currentPoint]);
-			printf("%d\n", varImgMinDist[currentPoint]);
 			}*/
 	}
 
@@ -216,7 +205,7 @@ void writePoints(char * path, uint16_t file_number) {
 	#endif
 			
 	// Reset file position to beginning (FILE_WRITE opens at the end of the file)
-    //file.seek(0);
+    fseek(f, 0, SEEK_SET);
 
 	//iterate over 1 file with 'NUM_OF_POINTS_PER_FILE' points
 	for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
@@ -229,29 +218,8 @@ void writePoints(char * path, uint16_t file_number) {
 			//write cluster
 			fwrite(&varImgCluster[currentPoint], 1, 1, f);
 
-			//write minDist (4 bytes)
-			uint8_t msb = (varImgMinDist[currentPoint] >> 24);
-			uint8_t nmsb = (varImgMinDist[currentPoint] >> 16);
-			uint8_t nlsb = (varImgMinDist[currentPoint] >> 8);
-
-			fwrite(&msb, 1, 1, f); // Write the most significant byte
-			fwrite(&nmsb, 1, 1, f); // Write the next most significant byte
-			fwrite(&nlsb, 1, 1, f); // Write the next least significant byte
-			fwrite(&varImgMinDist[currentPoint], 1, 1, f);  // Write the least significant byte
-
 			/*
-			//write all data at once
-			uint8_t writeData[1+DIM+1+4];
-			writeData[0] = varImgLabel[currentPoint];
-			for (uint16_t i = 1; i <= DIM; i++)
-				writeData[i] = varImgCoor[currentPoint][i-1];
-			writeData[DIM+1] = varImgCluster[currentPoint];
-			writeData[DIM+2] = (varImgMinDist[currentPoint] >> 24);
-			writeData[DIM+3] = (varImgMinDist[currentPoint] >> 16);
-			writeData[DIM+4] = (varImgMinDist[currentPoint] >> 8);
-			writeData[DIM+5] = varImgMinDist[currentPoint];
-
-			fwrite(writeData, 1, DIM+6, f);  // Write all bytes of point at once
+			fwrite(writeData, 1, DIM+2, f);  // Write all bytes of point at once
 			*/
 	}
 
@@ -329,6 +297,7 @@ double calculateTrainingAccuracy()
 	return (double)correct_labels/(double)total_labels;
 }
 
+/*
 uint8_t predict(uint8_t point)
 {
 	//uint8_t lab;
@@ -348,6 +317,7 @@ uint8_t predict(uint8_t point)
 
 	return varImgLabel[point];
 }
+*/
 
 void kMeansClustering()
 {
@@ -371,6 +341,7 @@ void kMeansClustering()
 	#endif
 
 	int dist; 					//used for distance function
+	int minDist;				//used for tracking minimal distance for current point
 	uint8_t clusterId;			//used for sum and nPoints arrays
 
 	// Allocate memory for the array of pointers
@@ -394,12 +365,64 @@ void kMeansClustering()
 
 	uint16_t file_iterator;			//define which file is now using 
 	uint8_t file_point_iterator;	//define on which image is now computing 
-	bool update = false;			//define whether file should be updated
 	
 	for (uint16_t iter = 0; iter < EPOCHS; iter++)
 	{
 		changed = false;
+
+		//New code version
+		//for each image calculate the closest cluster and sum it for new centroids
+		//this approach reduces reading and writing to files
+
+		// Initialize nPoints and sum with zeroes
+		for (uint8_t j = 0; j < K; ++j) 
+		{
+			nPoints[j] = 0;
+			for (uint16_t i = 0; i < DIM; i++)
+			{
+				sum[i][j] = 0.0;
+			}
+		}
+
+		file_iterator = 0;
+		//load first 'NUM_OF_POINTS_PER_FILE' images
+		readPoints(bin_train, file_iterator);
+		for (uint16_t i = 0; i < n; i++) {
+
+			//track number of point inside each file
+			file_point_iterator = i % NUM_OF_POINTS_PER_FILE;
+			if (file_point_iterator == 0 && i != 0) {
+
+				writePoints(bin_train, file_iterator); 
+				
+				file_iterator++;
+
+				//load next 'NUM_OF_POINTS_PER_FILE' images
+				readPoints(bin_train, file_iterator); 
+			}
+
+			minDist = __INT_MAX__;
+			//find the closest cluster
+			for (uint8_t c = 0; c < K; c++) {
+				dist = distance(cntrCoor[c], varImgCoor[file_point_iterator]);
+			    if (dist < minDist) 
+			    {
+					minDist = dist;
+					varImgCluster[file_point_iterator] = c;
+			    }
+			}
+
+			clusterId = varImgCluster[file_iterator];
+			nPoints[clusterId] += 1;
+			for (int coor = 0; coor < DIM; coor++)
+			{
+				sum[coor][clusterId] += varImgCoor[file_point_iterator][coor];
+			}
+		}
+		writePoints(bin_train, file_iterator); 
 		
+/*
+		//Old code version
 		for (uint8_t c = 0; c < K; c++) 
 		{
 			#ifdef DEBUG
@@ -492,6 +515,7 @@ void kMeansClustering()
 		#ifdef DEBUG
 			printf("Sum 2d array for centroids computed\n");
 		#endif
+*/
 
 		// Compute the new centroids using sum arrays
 		for (uint8_t c = 0; c < K; c++) 

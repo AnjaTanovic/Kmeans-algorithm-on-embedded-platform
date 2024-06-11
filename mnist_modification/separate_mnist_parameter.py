@@ -12,7 +12,6 @@ output_directory = 'mnist_train_images'
 os.makedirs(output_directory, exist_ok=True)
 
 file_iterator = 0
-max_int_32bit = 2**31 - 1  # Maximum 32-bit integer value
 
 # Read the MNIST CSV file
 with open(mnist_csv_path, 'r') as csvfile:
@@ -28,7 +27,7 @@ with open(mnist_csv_path, 'r') as csvfile:
             file_iterator = file_iterator + 1
             
         # Add two additional columns (cluster and minDistance)
-        row.extend(['-1', str(max_int_32bit)])
+        row.append('-1')
         
         # Save the row as a separate CSV file
         csv_filename = f'img_{file_iterator}.csv'

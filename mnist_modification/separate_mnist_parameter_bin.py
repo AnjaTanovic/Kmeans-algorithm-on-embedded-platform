@@ -12,7 +12,6 @@ output_directory = 'mnist_train_images'
 os.makedirs(output_directory, exist_ok=True)
 
 file_iterator = 0
-max_int_32bit = 2**31 - 1  # Maximum 32-bit integer value
 
 # Read the MNIST CSV file
 with open(mnist_csv_path, 'r') as csvfile:
@@ -30,8 +29,8 @@ with open(mnist_csv_path, 'r') as csvfile:
         # Convert pixel values to bytes
         pixel_bytes = bytes([int(pixel) for pixel in row])
         
-        # Add two additional bytes (-1 for cluster and 32-bit max integer for minDist)
-        additional_bytes = b'\xFF' + b'\x7F' + b'\xFF' * 3
+        # Add additional byte -1 for cluster
+        additional_byte = b'\xFF'
         
         # Save the pixel bytes to a binary file
         binary_filename = f'img_{file_iterator}.bin'
@@ -40,6 +39,6 @@ with open(mnist_csv_path, 'r') as csvfile:
         # Write the pixel bytes to the new binary file
         with open(binary_path, 'ab') as binary_file:
             binary_file.write(pixel_bytes)
-            binary_file.write(additional_bytes)
+            binary_file.write(additional_byte)
 
 print(f"Separation complete. Binary files are saved in the '{output_directory}' directory.")

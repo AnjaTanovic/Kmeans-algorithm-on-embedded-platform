@@ -18,8 +18,8 @@ with open(mnist_csv_path, 'r') as csvfile:
     
     # Process each row in the CSV file
     for i, row in enumerate(csvreader):
-        # Add two additional columns (cluster and minDistance)
-        row.extend(['-1', str(sys.float_info.max)])
+        # Add additional column for cluster
+        row.append('-1')
         
         # Save the row as a separate CSV file
         csv_filename = f'img_{i}.csv'

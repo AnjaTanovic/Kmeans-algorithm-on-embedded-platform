@@ -6,8 +6,8 @@ import sys
 mnist_csv_path = 'mnist/mnist_train.csv'
 
 # Create a directory to store the individual image files
-output_directory = 'mnist_cluster_distance'
-out_filename = 'mnist_train_c_d.csv'
+output_directory = 'mnist_cluster'
+out_filename = 'mnist_train_c.csv'
 
 # Ensure the output directory exists
 os.makedirs(output_directory, exist_ok=True)
@@ -23,7 +23,7 @@ with open(mnist_csv_path, 'r') as csvfile, open(csv_path, 'w', newline='') as cs
     # Process each row in the CSV file
     for i, row in enumerate(csvreader):
         # Add two additional columns (cluster and minDistance)
-        row.extend(['-1', str(sys.float_info.max)])
+        row.extend('-1')
 
         # Write the modified row to the new CSV file
         csv_writer.writerow(row)
