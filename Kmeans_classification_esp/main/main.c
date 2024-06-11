@@ -435,8 +435,11 @@ void kMeansClustering()
 			    }
 			}
 			//update last 'NUM_OF_POINTS_PER_FILE' points
-			if (update)
+			if (update) {
 				writePoints(bin_train, file_iterator); 
+				update = false;
+			}
+
 		}
 
 		#ifdef DEBUG
