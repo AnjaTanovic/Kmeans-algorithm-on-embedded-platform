@@ -4,10 +4,10 @@ import csv
 from sklearn.datasets import make_blobs
 from sklearn.decomposition import PCA
 
-dimensionality = 100     #number of dimensions of one point (for example, mnist has 784)
-cluster_spread = 0.80   #how much the clusters spill over and overlap
-num_of_data = 2000      #number of points in whole dataset
-num_centers = 50        #k for kmeans
+dimensionality = 5     #number of dimensions of one point (for example, mnist has 784)
+cluster_spread = 0.90   #how much the clusters spill over and overlap
+num_of_data = 5000      #number of points in whole dataset
+num_centers = 10        #k for kmeans
 
 X_train, y_train_true = make_blobs(n_samples=num_of_data, centers=num_centers,
                                    cluster_std=cluster_spread, random_state=0, n_features = dimensionality)
@@ -18,7 +18,7 @@ X_train_max = X_train.max(axis=0)
 X_train = ((X_train - X_train_min) / (X_train_max - X_train_min) * 255).astype(int)
 
 # Save dataset to CSV
-filename = f'dataset_k{num_centers}_d{dimensionality}_data{num_of_data}.csv'
+filename = f'testing/dataset_k{num_centers}_d{dimensionality}_data{num_of_data}.csv'
 header = ['label'] + [f'feature_{i+1}' for i in range(dimensionality)]
 with open(filename, 'w', newline='') as file:
     writer = csv.writer(file)
