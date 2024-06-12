@@ -7,7 +7,7 @@
 #include "esp_flash.h"
 #include "esp_system.h"
 
-#include <time.h>
+#include <sys/time.h>
 
 //#include "SD_MMC.h"
 
@@ -413,7 +413,7 @@ void kMeansClustering()
 			    }
 			}
 
-			clusterId = varImgCluster[file_iterator];
+			clusterId = varImgCluster[file_point_iterator];
 			nPoints[clusterId] += 1;
 			for (int coor = 0; coor < DIM; coor++)
 			{
@@ -539,14 +539,18 @@ void kMeansClustering()
 		
 		if (changed == false)    //Check if kmeans algorithm has converged
 		{
+			#ifdef DEBUG
 			printf("Kmeans algorithm has converged. Total number of iterations: ");
       		printf("%d\n",iter);
+			#endif
 			break;  
 		}
 		if (iter == EPOCHS - 1)
 		{
+			#ifdef DEBUG
 			printf("Kmeans algorithm has reached maximum number of iterations, but not converged. Total number of iterations: ");
       		printf("%d\n", iter + 1);
+			#endif
 			changed = false; //ending for loop
 			break;
 		}
@@ -568,7 +572,7 @@ void app_main(void)
 {
     vTaskDelay(3000 / portTICK_PERIOD_MS); //wait for opening the monitor
 
-    printf("Hello from esp32!\n");
+    printf("Running program on esp32...\n");
 
     /* Print chip information */
     esp_chip_info_t chip_info;
@@ -666,8 +670,10 @@ void app_main(void)
 	n = TRAIN_NUM;
 	
 	//Start measuring time
-	clock_t t;
-   	t = clock();	
+	struct timeval tv_now;
+	gettimeofday(&tv_now, NULL);
+	int64_t time_us_start = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;	
+	int32_t time_s_start = (int32_t)tv_now.tv_sec;
 
 	//Training
 	//Execute k-means algorithm
@@ -677,13 +683,16 @@ void app_main(void)
 	assignLabelToCluster();
 	
 	//Finish measuring time
-	t = clock() - t;
-	double time_taken = ((double)t)/CLOCKS_PER_SEC; // in seconds
+	gettimeofday(&tv_now, NULL);
+	int64_t time_us_finish = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;
+	int32_t time_s_finish = (int32_t)tv_now.tv_sec;	
 
 	printf("Training finished.\n");
 	printf("Time spent: ");
-	printf("%lf", time_taken);
-	printf(" s.\n");
+	printf("%lld", time_us_finish - time_us_start);
+	printf(" us ");
+	printf("(%ld", time_s_finish - time_s_start);
+	printf(" s).\n");
 	
 	//Calculate accuracy between true labels and kmeans labels
 	double accuracy = calculateTrainingAccuracy();
@@ -731,7 +740,7 @@ void app_main(void)
   	printf("%%.\n"); 
 	#endif
 	
-	//Store results
+	//Store results (final centroids)
 	#ifdef DEBUG
 	printf("Storing results...\n");
 	#endif
@@ -758,13 +767,11 @@ void app_main(void)
     //file.seek(0);
 
 	for (uint8_t c = 0; c < K; c++) {
-
 		//Write label
 		fwrite(&label_clust[c], 1, 1, f);
 
 		//Write coordinates
 		fwrite(cntrCoor[c], 1, DIM, f);
-		fprintf(f, "\n");
     }
 	fclose(f);
 
@@ -783,6 +790,7 @@ void app_main(void)
     }
 	#endif
 
+	#ifdef PRINT_FILES
     printf("Reading result file: %s\n", csv_result);
 	int byte;
 	while ((byte = fgetc(f)) != EOF) {
@@ -790,6 +798,7 @@ void app_main(void)
         printf("%02X\n", byte);
     }
 	fclose(f);
+	#endif
 	#endif
 
 	// Free memory
@@ -803,4 +812,6 @@ void app_main(void)
     esp_vfs_spiffs_unregister(conf.partition_label);
     ESP_LOGI(TAG, "SPIFFS unmounted");
     #endif
+
+	printf("Program finished.\n");
 }
