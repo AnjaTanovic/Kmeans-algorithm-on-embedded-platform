@@ -19,7 +19,8 @@ static const char *TAG = "FileSystem";
 
 #define DEBUG
 #define TEST_SEED
-#define CALC_ACC_BETWEEN_ITERATIONS
+//#define CALC_ACC_BETWEEN_ITERATIONS
+//#define PRINT_FILES
 
 #define DATASET_ON_FLASH
 
@@ -173,13 +174,13 @@ void readPoints(char * path, uint16_t file_number) {
 			//read cluster
 			fread(&varImgCluster[currentPoint], 1, 1, f);
 
-		/*	if (calc) {
-			printf("Point %d: ", currentPoint);
+			#ifdef PRINT_FILES
+			printf("Point %d from file %d:\n", currentPoint, file_number);
 			printf("%d ", varImgLabel[currentPoint]);
 			for (int i = 0 ; i < DIM; i++)
 				printf("%d ", varImgCoor[currentPoint][i]);
-			printf("%d ", varImgCluster[currentPoint]);
-			}*/
+			printf("%d \n\n", varImgCluster[currentPoint]);
+			#endif
 	}
 
 	fclose(f);
@@ -421,7 +422,7 @@ void kMeansClustering()
 		}
 		writePoints(bin_train, file_iterator); 
 		
-/*
+		/*
 		//Old code version
 		for (uint8_t c = 0; c < K; c++) 
 		{
@@ -515,7 +516,7 @@ void kMeansClustering()
 		#ifdef DEBUG
 			printf("Sum 2d array for centroids computed\n");
 		#endif
-*/
+		*/
 
 		// Compute the new centroids using sum arrays
 		for (uint8_t c = 0; c < K; c++) 
@@ -565,7 +566,7 @@ void kMeansClustering()
 
 void app_main(void)
 {
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(3000 / portTICK_PERIOD_MS); //wait for opening the monitor
 
     printf("Hello from esp32!\n");
 
