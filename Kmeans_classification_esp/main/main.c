@@ -122,14 +122,14 @@ void readRandomPoint(char * path, uint8_t number_of_centroid) {
 	//iterate over 1 file with 'NUM_OF_POINTS_PER_FILE' points, and find random point
 	for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
 		if (currentPoint == imgNumber) {
-				//read label
-				fread(&cntrLabel[number_of_centroid], 1, 1, f);
+			//read label
+			fread(&cntrLabel[number_of_centroid], 1, 1, f);
 
-				//read coordinates
-				fread(cntrCoor[number_of_centroid], 1, DIM, f);
+			//read coordinates
+			fread(cntrCoor[number_of_centroid], 1, DIM, f);
 
-				//read cluster
-				fread(&cntrCluster[number_of_centroid], 1, 1, f);
+			//read cluster
+			fread(&cntrCluster[number_of_centroid], 1, 1, f);
 
 			break;
 		}
@@ -165,22 +165,22 @@ void readPoints(char * path, uint16_t file_number) {
 
 	//iterate over 1 file with 'NUM_OF_POINTS_PER_FILE' points
 	for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
-			//read label
-			fread(&varImgLabel[currentPoint], 1, 1, f);
+		//read label
+		fread(&varImgLabel[currentPoint], 1, 1, f);
 
-			//read coordinates
-			fread(varImgCoor[currentPoint], 1, DIM, f);
+		//read coordinates
+		fread(varImgCoor[currentPoint], 1, DIM, f);
 
-			//read cluster
-			fread(&varImgCluster[currentPoint], 1, 1, f);
+		//read cluster
+		fread(&varImgCluster[currentPoint], 1, 1, f);
 
-			#ifdef PRINT_FILES
-			printf("Point %d from file %d:\n", currentPoint, file_number);
-			printf("%d ", varImgLabel[currentPoint]);
-			for (int i = 0 ; i < DIM; i++)
-				printf("%d ", varImgCoor[currentPoint][i]);
-			printf("%d \n\n", varImgCluster[currentPoint]);
-			#endif
+		#ifdef PRINT_FILES
+		printf("Point %d from file %d:\n", currentPoint, file_number);
+		printf("%d ", varImgLabel[currentPoint]);
+		for (int i = 0 ; i < DIM; i++)
+			printf("%d ", varImgCoor[currentPoint][i]);
+		printf("%d \n\n", varImgCluster[currentPoint]);
+		#endif
 	}
 
 	fclose(f);
@@ -210,18 +210,18 @@ void writePoints(char * path, uint16_t file_number) {
 
 	//iterate over 1 file with 'NUM_OF_POINTS_PER_FILE' points
 	for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
-			//write label
-			fwrite(&varImgLabel[currentPoint], 1, 1, f);
+		//write label
+		fwrite(&varImgLabel[currentPoint], 1, 1, f);
 
-			//write coordinates
-			fwrite(varImgCoor[currentPoint], 1, DIM, f);
+		//write coordinates
+		fwrite(varImgCoor[currentPoint], 1, DIM, f);
 
-			//write cluster
-			fwrite(&varImgCluster[currentPoint], 1, 1, f);
+		//write cluster
+		fwrite(&varImgCluster[currentPoint], 1, 1, f);
 
-			/*
-			fwrite(writeData, 1, DIM+2, f);  // Write all bytes of point at once
-			*/
+		/*
+		fwrite(writeData, 1, DIM+2, f);  // Write all bytes of point at once
+		*/
 	}
 
 	fclose(f);
