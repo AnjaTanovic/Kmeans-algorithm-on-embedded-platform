@@ -348,7 +348,7 @@ void testSD() {
 	    sprintf(new_read_path_sd, "/sdcard%s_%d.bin", readPath, num_of_file);
         f = fopen(new_read_path_sd, "rb");
         if (f == NULL) {
-            ESP_LOGE(TAG_flash, "Failed to open file for reading");
+            ESP_LOGE(TAG_sd, "Failed to open file for reading");
             return;
         }   
         for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {

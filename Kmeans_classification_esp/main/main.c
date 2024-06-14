@@ -7,22 +7,39 @@
 #include "esp_flash.h"
 #include "esp_system.h"
 
-#include <sys/time.h>
-
-//#include "SD_MMC.h"
+#include <esp_timer.h>
 
 #include "esp_spiffs.h"
 #include "esp_err.h"
 #include "esp_log.h"
 
-static const char *TAG = "FileSystem";
+#include "sdmmc_cmd.h"
+#include "esp_vfs_fat.h"
+#include "driver/sdmmc_host.h"
+
+#include <string.h>
 
 #define DEBUG
 #define TEST_SEED
 //#define CALC_ACC_BETWEEN_ITERATIONS
 //#define PRINT_FILES
 
+//Define only one case!!!
 #define DATASET_ON_FLASH
+//#define DATASET_ON_SD
+//#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
+							//results are stored on flash (for potential later usage)
+							//flash is used because it saves data during sleep
+
+#ifdef DATASET_ON_FLASH
+static const char *TAG = "FileSystem";
+#endif
+#ifdef DATASET_ON_SD
+static const char *TAG = "SD";
+#endif
+#ifdef DATASET_IN_PSRAM
+static const char *TAG = "FileSystem";
+#endif
 
 #define TRAIN_NUM 1000		//number of training images
 #define TEST_NUM 10000		//number of test images
@@ -51,10 +68,19 @@ on SD are 60000/250 = 240 files for training, and
 10000/250 = 40 files for testing
 */
 
+#ifdef DATASET_ON_FLASH
 char bin_train[] = "/img";
+#endif
+#ifdef DATASET_ON_SD
+char bin_train[] = "/train/img";
 char bin_test[] = "/test/img";
-const char csv_result_path[] = "/result";
-char csv_result[50]; 
+#endif
+#ifdef DATASET_IN_PSRAM
+char bin_train[] = "/img";
+#endif
+
+char result_path[] = "/result";
+char result[50]; 
 
 uint8_t label_clust[K]; 	//meaning of cluster (number)
 
@@ -95,9 +121,15 @@ void readRandomPoint(char * path, uint8_t number_of_centroid) {
 	//Read random point from random file
 	uint16_t num_of_files = n/NUM_OF_POINTS_PER_FILE;
 
+	#ifdef DATASET_ON_FLASH
 	char new_path[50]; 
 	sprintf(new_path, "/spiffs%s_%d.bin", path, (int)(rand() % num_of_files));
-
+	#endif
+	#ifdef DATASET_ON_SD
+		char new_path[50]; 
+	sprintf(new_path, "/sdcard%s_%d.bin", path, (int)(rand() % num_of_files));
+	#endif
+	
 	uint8_t imgNumber = rand() % NUM_OF_POINTS_PER_FILE;
 	
 	#ifdef DEBUG
@@ -111,12 +143,16 @@ void readRandomPoint(char * path, uint8_t number_of_centroid) {
         ESP_LOGE(TAG, "Failed to open file for reading");
         return;
 	}
-	#else
-	File file = SD_MMC.open(new_path);
-    if(!file){
-      Serial.println("Failed to open file for reading");
-      return;
-    }
+	#endif
+	#ifdef DATASET_ON_SD
+	FILE* f = fopen(new_path, "rb");
+    if (f == NULL) {
+        ESP_LOGE(TAG, "Failed to open file for reading");
+        return;
+	}
+	#endif
+	#ifdef DATASET_IN_PSRAM
+
 	#endif
 
 	//iterate over 1 file with 'NUM_OF_POINTS_PER_FILE' points, and find random point
@@ -146,20 +182,23 @@ void readPoints(char * path, uint16_t file_number) {
 
 	//Points are always read in the same variables for image (varImgCoor[NUM_OF_POINTS_PER_FILE][DIM], varImgCluster[NUM_OF_POINTS_PER_FILE], 
 	//varImgLabel[NUM_OF_POINTS_PER_FILE])
-	char new_path[50]; 
-	sprintf(new_path, "/spiffs%s_%d.bin", path, (int)file_number);
 
 	#ifdef DATASET_ON_FLASH
+	char new_path[50]; 
+	sprintf(new_path, "/spiffs%s_%d.bin", path, (int)file_number);
 	FILE* f = fopen(new_path, "rb");
     if (f == NULL) {
         ESP_LOGE(TAG, "Failed to open file for reading");
         return;
     }
-	#else
-	File file = SD_MMC.open(new_path);
-    if(!file){
-      Serial.println("Failed to open file for reading");
-      return;
+	#endif
+	#ifdef DATASET_ON_SD
+	char new_path[50]; 
+	sprintf(new_path, "/sdcard%s_%d.bin", path, (int)file_number);
+	FILE* f = fopen(new_path, "rb");
+    if (f == NULL) {
+        ESP_LOGE(TAG, "Failed to open file for reading");
+        return;
     }
 	#endif
 
@@ -188,19 +227,21 @@ void readPoints(char * path, uint16_t file_number) {
 
 void writePoints(char * path, uint16_t file_number) {
 
+	#ifdef DATASET_ON_FLASH
 	char new_path[50]; 
 	sprintf(new_path, "/spiffs%s_%d.bin", path, (int)file_number);
-
-	#ifdef DATASET_ON_FLASH
 	FILE* f = fopen(new_path, "wb");
     if (f == NULL) {
         ESP_LOGE(TAG, "Failed to open file for writing");
         return;
     }
-	#else
-	File file = SD_MMC.open(new_path, FILE_WRITE);
-    if(!file){
-        Serial.println("Failed to open file for writing");
+	#endif
+	#ifdef DATASET_ON_SD
+	char new_path[50]; 
+	sprintf(new_path, "/sdcard%s_%d.bin", path, (int)file_number);
+	FILE* f = fopen(new_path, "wb");
+    if (f == NULL) {
+        ESP_LOGE(TAG, "Failed to open file for writing");
         return;
     }
 	#endif
@@ -298,19 +339,21 @@ double calculateTrainingAccuracy()
 	return (double)correct_labels/(double)total_labels;
 }
 
-/*
 uint8_t predict(uint8_t point)
 {
 	//uint8_t lab;
 	int dist;
+	int minDist;
+
+	minDist = __INT_MAX__;
 	
 	for (uint8_t c = 0; c < K; c++) 
 	{
 		//lab = label_clust[c];
 		dist = distance(cntrCoor[c], varImgCoor[point]);
-		if (dist < varImgMinDist[point])
+		if (dist < minDist)
 		{
-			varImgMinDist[point] = dist;
+			minDist = dist;
 			//varImgLabel = lab;
 			varImgLabel[point] = label_clust[c]; //real label of cluster c
 		}
@@ -318,7 +361,6 @@ uint8_t predict(uint8_t point)
 
 	return varImgLabel[point];
 }
-*/
 
 void kMeansClustering()
 {
@@ -648,21 +690,35 @@ void app_main(void)
             ESP_LOGI(TAG, "SPIFFS_check() successful");
         }
     }
-	#else
+	#endif
+	#ifdef DATASET_ON_SD
 	//Init SD card
-  	if(!SD_MMC.begin()){
-		printf("Card Mount Failed\n");
-		return;
-	}
-	uint8_t cardType = SD_MMC.cardType();
+  	ESP_LOGI(TAG, "Initializing SD card");
 
-	if(cardType == CARD_NONE){
-		printf("No SD_MMC card attached\n");
-		return;
-	}
+    sdmmc_card_t *card;
+    const char mount_point[] = "/sdcard";
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
 
-	uint64_t cardSize = SD_MMC.cardSize() / (1024 * 1024);
-    printf("SD_MMC Card Size: %lluMB\n", cardSize);
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+        .format_if_mount_failed = true,
+        .max_files = 5
+    };
+ 
+    ESP_LOGI(TAG, "Mounting filesystem");
+    esp_err_t ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
+
+    if (ret != ESP_OK) {
+        if (ret == ESP_FAIL) {
+            ESP_LOGE(TAG, "Failed to mount filesystem. "
+                     "If you want the card to be formatted, set the EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
+        } else {
+            ESP_LOGE(TAG, "Failed to initialize the card (%s). "
+                     "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
+        }
+        return;
+    }
+    ESP_LOGI(TAG, "Filesystem mounted");
 	#endif
 
     printf("TRAINING STARTED.\n");
@@ -670,10 +726,7 @@ void app_main(void)
 	n = TRAIN_NUM;
 	
 	//Start measuring time
-	struct timeval tv_now;
-	gettimeofday(&tv_now, NULL);
-	int64_t time_us_start = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;	
-	int32_t time_s_start = (int32_t)tv_now.tv_sec;
+    uint64_t start_time = esp_timer_get_time();  
 
 	//Training
 	//Execute k-means algorithm
@@ -683,16 +736,9 @@ void app_main(void)
 	assignLabelToCluster();
 	
 	//Finish measuring time
-	gettimeofday(&tv_now, NULL);
-	int64_t time_us_finish = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;
-	int32_t time_s_finish = (int32_t)tv_now.tv_sec;	
-
+	uint64_t end_time = esp_timer_get_time();
 	printf("Training finished.\n");
-	printf("Time spent: ");
-	printf("%lld", time_us_finish - time_us_start);
-	printf(" us ");
-	printf("(%ld", time_s_finish - time_s_start);
-	printf(" s).\n");
+    printf("Time spent: %llu microseconds (%llu seconds).\n", end_time - start_time, (end_time - start_time)/1000000); 
 	
 	//Calculate accuracy between true labels and kmeans labels
 	double accuracy = calculateTrainingAccuracy();
@@ -701,7 +747,7 @@ void app_main(void)
 	printf("%lf", 100*accuracy);
 	printf("%%.\n"); 
 
-	#ifndef DATASET_ON_FLASH
+	#ifdef DATASET_ON_SD
 	//Testing
 	n = TEST_NUM;
 	uint8_t predicted_number;
@@ -714,12 +760,7 @@ void app_main(void)
 	for (uint16_t i = 0; i < n; i++) 
 	{
 		file_point_iterator = i % NUM_OF_POINTS_PER_FILE;
-		if (file_point_iterator == 0 && i != 0) {
-			#ifdef DEBUG
-			printf("Testing for file ");
-			printf("%d", file_iterator);
-			#endif
-			
+		if (file_point_iterator == 0 && i != 0) {			
 			file_iterator++;
 
 			//load next 'NUM_OF_POINTS_PER_FILE' images
@@ -735,7 +776,7 @@ void app_main(void)
 	
 	accuracy = (double)correct_labels/(double)n; //n is now number of points in test set
 
-	printf("* Accuracy for test set is \n");
+	printf("* Accuracy for test set is ");
   	printf("%lf", 100*accuracy);
   	printf("%%.\n"); 
 	#endif
@@ -746,22 +787,20 @@ void app_main(void)
 	#endif
 	
 	#ifdef DATASET_ON_FLASH
-	sprintf(csv_result, "/spiffs%s_k%d.csv", csv_result_path, K); 
+	sprintf(result, "/spiffs%s_k%d.bin", result_path, K); 
+	#endif
+	#ifdef DATASET_ON_SD
+	sprintf(result, "/sdcard%s_k%d.bin", result_path, K); 
+	#endif
+	#ifdef DATASET_ON_PSRAM
+	sprintf(result, "/spiffs%s_k%d.bin", result_path, K); 
+	#endif
 
-	FILE* f = fopen(csv_result, "wb");
+	FILE* f = fopen(result, "wb");
     if (f == NULL) {
         ESP_LOGE(TAG, "Failed to open file for writing");
         return;
     }
-	#else
-	sprintf(csv_result, "%s_k%d.csv", csv_result_path, K); 
-
-	File file = SD_MMC.open(csv_result, FILE_WRITE);
-    if(!file){
-        printf("Failed to open file for writing\n");
-        return;
-    }
-	#endif
 	
 	// Reset file position to beginning (FILE_WRITE opens at the end of the file)
     //file.seek(0);
@@ -776,22 +815,17 @@ void app_main(void)
 	fclose(f);
 
 	#ifdef DEBUG
-	#ifdef DATASET_ON_FLASH
-	f = fopen(csv_result, "rb");
+	printf("Successfully stored centroids.\n");
+	#endif
+
+	#ifdef DEBUG
+	#ifdef PRINT_FILES
+	f = fopen(result, "rb");
     if (f == NULL) {
         ESP_LOGE(TAG, "Failed to open file for reading");
         return;
     }
-	#else
-	file = SD_MMC.open(csv_result, FILE_READ);
-    if(!file){
-        Serial.println("Failed to open file for reading");
-        return;
-    }
-	#endif
-
-	#ifdef PRINT_FILES
-    printf("Reading result file: %s\n", csv_result);
+    printf("Reading result file: %s\n", result);
 	int byte;
 	while ((byte = fgetc(f)) != EOF) {
         // Process each byte (here we just print it)
@@ -808,6 +842,16 @@ void app_main(void)
     free(sum); // Free memory for the array of pointers
 
     #ifdef DATASET_ON_FLASH
+    // All done, unmount partition and disable SPIFFS
+    esp_vfs_spiffs_unregister(conf.partition_label);
+    ESP_LOGI(TAG, "SPIFFS unmounted");
+    #endif
+	#ifdef DATASET_ON_SD
+	// All done, unmount sd card
+    esp_vfs_fat_sdcard_unmount(mount_point, card);
+    ESP_LOGI(TAG, "Card unmounted");
+	#endif
+	#ifdef DATASET_IN_PSRAM
     // All done, unmount partition and disable SPIFFS
     esp_vfs_spiffs_unregister(conf.partition_label);
     ESP_LOGI(TAG, "SPIFFS unmounted");
