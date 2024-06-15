@@ -175,7 +175,7 @@ void testFLASH() {
     end_time = esp_timer_get_time();
     uint64_t duration = end_time - start_time;
     printf("Time spent for reading: %llu microseconds\n", duration); 
-    uint16_t bytes = NUM_OF_POINTS_PER_FILE * (DIM + 2);
+    uint32_t bytes = NUM_OF_POINTS_PER_FILE * NUM_OF_FILES * (DIM + 2);
     double speed = (bytes / (double)duration) * 1000000.0 / (1024.0 * 1024.0); // Speed in megabytes per second
     printf("Read speed: %.6lf MB/s\n\n", speed); 
          
@@ -211,7 +211,7 @@ void testFLASH() {
     end_time = esp_timer_get_time();
     duration = end_time - start_time;
     printf("Time spent for writing: %llu microseconds\n", duration); 
-    bytes = NUM_OF_POINTS_PER_FILE * (DIM + 2);
+    bytes = NUM_OF_POINTS_PER_FILE * NUM_OF_FILES * (DIM + 2);
     speed = (bytes / (double)duration) * 1000000.0 / (1024.0 * 1024.0); // Speed in megabytes per second
     printf("Write speed: %.6lf MB/s\n\n", speed);  
 
@@ -241,7 +241,7 @@ void testPSRAM() {
     end_time = esp_timer_get_time();
     uint64_t duration = end_time - start_time;
     printf("Time spent for initial writing: %llu microseconds\n", duration); 
-    uint16_t bytes = NUM_OF_POINTS_PER_FILE * (DIM + 2);
+    uint32_t bytes = NUM_OF_POINTS_PER_FILE * NUM_OF_FILES * (DIM + 2);
     double speed = (bytes / (double)duration) * 1000000.0 / (1024.0 * 1024.0); // Speed in megabytes per second
     printf("Write speed: %.6lf MB/s\n\n", speed);     
 
@@ -270,7 +270,7 @@ void testPSRAM() {
     end_time = esp_timer_get_time();
     duration = end_time - start_time;
     printf("Time spent for reading: %llu microseconds\n", duration); 
-    bytes = NUM_OF_POINTS_PER_FILE * (DIM + 2);
+    bytes = NUM_OF_POINTS_PER_FILE * NUM_OF_FILES * (DIM + 2);
     speed = (bytes / (double)duration) * 1000000.0 / (1024.0 * 1024.0); // Speed in megabytes per second
     printf("Read speed: %.6lf MB/s\n\n", speed);  
          
@@ -296,7 +296,7 @@ void testPSRAM() {
     end_time = esp_timer_get_time();
     duration = end_time - start_time;
     printf("Time spent for writing: %llu microseconds\n", duration); 
-    bytes = NUM_OF_POINTS_PER_FILE * (DIM + 2);
+    bytes = NUM_OF_POINTS_PER_FILE * NUM_OF_FILES * (DIM + 2);
     speed = (bytes / (double)duration) * 1000000.0 / (1024.0 * 1024.0); // Speed in megabytes per second
     printf("Write speed: %.6lf MB/s\n\n", speed);  
 }
@@ -368,7 +368,7 @@ void testSD() {
     end_time = esp_timer_get_time();
     uint64_t duration = end_time - start_time;
     printf("Time spent for reading: %llu microseconds\n", duration); 
-    uint16_t bytes = NUM_OF_POINTS_PER_FILE * (DIM + 2);
+    uint32_t bytes = NUM_OF_POINTS_PER_FILE * NUM_OF_FILES * (DIM + 2);
     double speed = (bytes / (double)duration) * 1000000.0 / (1024.0 * 1024.0); // Speed in megabytes per second
     printf("Read speed: %.6lf MB/s\n\n", speed); 
          
@@ -404,7 +404,7 @@ void testSD() {
     end_time = esp_timer_get_time();
     duration = end_time - start_time;
     printf("Time spent for writing: %llu microseconds\n", duration); 
-    bytes = NUM_OF_POINTS_PER_FILE * (DIM + 2);
+    bytes = NUM_OF_POINTS_PER_FILE * NUM_OF_FILES * (DIM + 2);
     speed = (bytes / (double)duration) * 1000000.0 / (1024.0 * 1024.0); // Speed in megabytes per second
     printf("Write speed: %.6lf MB/s\n\n", speed);       
 
