@@ -225,7 +225,8 @@ void testPSRAM() {
 
    	//Start measuring time
     start_time = esp_timer_get_time();
-        
+
+//TEST 1    
     //Read data from dataset (generated data)
     for (uint32_t size = 0; size < NUM_OF_BYTES_IN_FILE/CHUNK_SIZE; size++) {
 
@@ -235,6 +236,13 @@ void testPSRAM() {
         
         //memcpy(buffer, psramBuffer, CHUNK_SIZE);
 	}
+//TEST 2 (psramBuff is size CHUNK_SIZE)
+    uint8_t it_num = 50;
+    uint8_t var = rand() % 256;
+    for (uint8_t it = 0; it < it_num; it++) {
+        for (uint16_t j = 0; j < CHUNK_SIZE; j++)
+            var |= psramBuffer[j];
+    }
 
     //Finish measuring time
     end_time = esp_timer_get_time();
@@ -249,6 +257,7 @@ void testPSRAM() {
     //Start measuring time
     start_time = esp_timer_get_time();	
         
+//TEST 1
     //Write all bytes again
     for (uint32_t size = 0; size < NUM_OF_BYTES_IN_FILE/CHUNK_SIZE; size++) {
 
@@ -258,6 +267,13 @@ void testPSRAM() {
         
         //memcpy(psramBuffer, buffer, CHUNK_SIZE);
 	}
+//TEST 2 (psramBuff is size CHUNK_SIZE), first this write only, and then read 
+    uint8_t it_num = 50;
+    uint8_t var = rand() % 256;
+    for (uint8_t it = 0; it < it_num; it++) {
+        for (uint16_t j = 0; j < CHUNK_SIZE; j++)
+            psramBuffer[j] |= var;
+    }
 
     //Finish measuring time
     end_time = esp_timer_get_time();
