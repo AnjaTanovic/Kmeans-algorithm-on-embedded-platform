@@ -26,8 +26,8 @@
 
 //Define only one case!!!
 //#define DATASET_ON_FLASH
-//#define DATASET_ON_SD
-#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
+#define DATASET_ON_SD
+//#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
 							//results are stored on flash (for potential later usage)
 							//flash is used because it saves data during sleep
 
