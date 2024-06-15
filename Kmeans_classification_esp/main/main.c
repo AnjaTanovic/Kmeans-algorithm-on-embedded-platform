@@ -503,6 +503,9 @@ void kMeansClustering()
 	{
 		changed = false;
 
+		// Yield control to other tasks (scheduler tasks, IDLE task...)
+        vTaskDelay(10 / portTICK_PERIOD_MS);	//10 ms delay (default tick period is 10ms, so any delay of less than 10ms results in a 0 delay) 
+
 		//New code version
 		//for each image calculate the closest cluster and sum it for new centroids
 		//this approach reduces reading and writing to files
@@ -683,13 +686,16 @@ void kMeansClustering()
 		printf("Finished iteration number ");
     	printf("%d\n", iter);
 		#endif
-		
+
 		if (changed == false)    //Check if kmeans algorithm has converged
 		{
 			#ifdef DEBUG
 			printf("Kmeans algorithm has converged. Total number of iterations: ");
       		printf("%d\n",iter);
 			#endif
+			// Yield control to other tasks (scheduler tasks, IDLE task...)
+        	vTaskDelay(10 / portTICK_PERIOD_MS);	//10 ms delay (default tick period is 10ms, so any delay of less than 10ms results in a 0 delay) 
+
 			break;  
 		}
 		if (iter == EPOCHS - 1)
@@ -699,6 +705,10 @@ void kMeansClustering()
       		printf("%d\n", iter + 1);
 			#endif
 			changed = false; //ending for loop
+
+			// Yield control to other tasks (scheduler tasks, IDLE task...)
+        	vTaskDelay(10 / portTICK_PERIOD_MS);	//10 ms delay (default tick period is 10ms, so any delay of less than 10ms results in a 0 delay) 
+
 			break;
 		}
 
@@ -717,7 +727,7 @@ void kMeansClustering()
 
 void app_main(void)
 {
-    vTaskDelay(3000 / portTICK_PERIOD_MS); //wait for opening the monitor
+    vTaskDelay(3000 / portTICK_PERIOD_MS); //wait 3 seconds for opening the monitor
 
     printf("Running program on esp32...\n");
 
@@ -977,13 +987,13 @@ void app_main(void)
 	#endif
 	
 	#ifdef DATASET_ON_FLASH
-	sprintf(result, "/spiffs%s_k%d.bin", result_path, K); 
+	sprintf(result, "/spiffs%s.bin", result_path); 
 	#endif
 	#ifdef DATASET_ON_SD
-	sprintf(result, "/sdcard%s_k%d.bin", result_path, K); 
+	sprintf(result, "/sdcard%s.bin", result_path); 
 	#endif
 	#ifdef DATASET_IN_PSRAM
-	sprintf(result, "/spiffs%s_k%d.bin", result_path, K); 
+	sprintf(result, "/spiffs%s.bin", result_path); 
 	#endif
 
 	FILE* f = fopen(result, "wb");
