@@ -25,9 +25,9 @@
 //#define PRINT_FILES
 
 //Define only one case!!!
-#define DATASET_ON_FLASH
+//#define DATASET_ON_FLASH
 //#define DATASET_ON_SD
-//#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
+#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
 							//results are stored on flash (for potential later usage)
 							//flash is used because it saves data during sleep
 
@@ -59,6 +59,7 @@ EPOCHS is max number of iterations (1.option - defined as macro,
 */
 	
 uint16_t n = 0; 					//number of points (used for both training and testing)
+#define NUM_OF_FILES 4				//number of files with data
 #define NUM_OF_POINTS_PER_FILE 250	//number of points stored in file
 //const uint16_t num_of_bytes_per_point = 1 + DIM + 1;  	//number of bytes per point (1 for label, 
 															//DIM for img pixels, 1 for cluster) 
@@ -102,6 +103,13 @@ uint8_t varImgCoor[NUM_OF_POINTS_PER_FILE][DIM];				// coordinates for image
 uint8_t varImgCluster[NUM_OF_POINTS_PER_FILE];				// nearest cluster for variable image, no default cluster
 uint8_t varImgLabel[NUM_OF_POINTS_PER_FILE];					// label from csv file for variable image
 
+#ifdef DATASET_IN_PSRAM
+//arrays in external RAM (PSRAM) where dataset is stored
+EXT_RAM_BSS_ATTR uint8_t psramCoor[NUM_OF_FILES * NUM_OF_POINTS_PER_FILE][DIM];			
+EXT_RAM_BSS_ATTR uint8_t psramCluster[NUM_OF_FILES * NUM_OF_POINTS_PER_FILE];
+EXT_RAM_BSS_ATTR uint8_t psramLabel[NUM_OF_FILES * NUM_OF_POINTS_PER_FILE];					
+#endif
+
 //Arrays for centroid computation
 uint16_t nPoints[K]; 					//array for each cluster, to sum number of points for particular cluster
 uint16_t **sum; 
@@ -116,18 +124,44 @@ int distance(uint8_t *coor1, uint8_t *coor2) {
     return dist;
 }
 
+#ifdef DATASET_IN_PSRAM
+void loadRandomPoints() {
+	uint16_t file_num;
+	uint8_t imgNumber;
+	for (uint8_t c = 0; c < K; c++) {
+		file_num = rand() % NUM_OF_FILES;
+		imgNumber = rand() % NUM_OF_POINTS_PER_FILE;
+		#ifdef DEBUG
+		printf("Random point from ");
+		printf("group %d, point %d\n", file_num, imgNumber);
+		#endif
+
+		//load label	
+		cntrLabel[c] = psramLabel[file_num * NUM_OF_POINTS_PER_FILE + imgNumber];
+
+		//load coordinates
+		/*
+		for (uint8_t i = 0; i < DIM; i++)
+			cntrCoor[c][i] = psramCoor[file_num * NUM_OF_POINTS_PER_FILE + imgNumber][i];
+		*/
+		memcpy(cntrCoor[c], psramCoor[file_num * NUM_OF_POINTS_PER_FILE + imgNumber], DIM);
+		
+		//load cluster
+		cntrCluster[c] = psramCluster[file_num * NUM_OF_POINTS_PER_FILE + imgNumber];
+	}
+}
+#else
 void readRandomPoint(char * path, uint8_t number_of_centroid) {
 
 	//Read random point from random file
-	uint16_t num_of_files = n/NUM_OF_POINTS_PER_FILE;
 
 	#ifdef DATASET_ON_FLASH
 	char new_path[50]; 
-	sprintf(new_path, "/spiffs%s_%d.bin", path, (int)(rand() % num_of_files));
+	sprintf(new_path, "/spiffs%s_%d.bin", path, (int)(rand() % NUM_OF_FILES));
 	#endif
 	#ifdef DATASET_ON_SD
 		char new_path[50]; 
-	sprintf(new_path, "/sdcard%s_%d.bin", path, (int)(rand() % num_of_files));
+	sprintf(new_path, "/sdcard%s_%d.bin", path, (int)(rand() % NUM_OF_FILES));
 	#endif
 	
 	uint8_t imgNumber = rand() % NUM_OF_POINTS_PER_FILE;
@@ -150,9 +184,6 @@ void readRandomPoint(char * path, uint8_t number_of_centroid) {
         ESP_LOGE(TAG, "Failed to open file for reading");
         return;
 	}
-	#endif
-	#ifdef DATASET_IN_PSRAM
-
 	#endif
 
 	//iterate over 1 file with 'NUM_OF_POINTS_PER_FILE' points, and find random point
@@ -177,7 +208,26 @@ void readRandomPoint(char * path, uint8_t number_of_centroid) {
 
 	fclose(f);
 }
+#endif
 
+#ifdef DATASET_IN_PSRAM
+void loadPoints(uint16_t file_number) {
+	for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
+		//load label
+		varImgLabel[currentPoint] = psramLabel[file_number * NUM_OF_POINTS_PER_FILE + currentPoint];
+
+		//load coordinates
+		/*
+		for (uint8_t i = 0; i < DIM; i++)
+			varImgCoor[currentPoint][i] = psramCoor[file_num * NUM_OF_POINTS_PER_FILE + currentPoint][i];
+		*/
+		memcpy(varImgCoor[currentPoint], psramCoor[file_number * NUM_OF_POINTS_PER_FILE + currentPoint], DIM);
+		
+		//load cluster
+		varImgCluster[currentPoint] = psramCluster[file_number * NUM_OF_POINTS_PER_FILE + currentPoint];
+	}
+}
+#else
 void readPoints(char * path, uint16_t file_number) {
 
 	//Points are always read in the same variables for image (varImgCoor[NUM_OF_POINTS_PER_FILE][DIM], varImgCluster[NUM_OF_POINTS_PER_FILE], 
@@ -224,7 +274,26 @@ void readPoints(char * path, uint16_t file_number) {
 
 	fclose(f);
 }
+#endif
 
+#ifdef DATASET_IN_PSRAM
+void storePoints(uint16_t file_number) {
+	for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
+		//store label
+		psramLabel[file_number * NUM_OF_POINTS_PER_FILE + currentPoint] = varImgLabel[currentPoint];
+
+		//store coordinates
+		/*
+		for (uint8_t i = 0; i < DIM; i++)
+			psramCoor[file_num * NUM_OF_POINTS_PER_FILE + currentPoint][i] = varImgCoor[currentPoint][i];
+		*/
+		memcpy(psramCoor[file_number * NUM_OF_POINTS_PER_FILE + currentPoint], varImgCoor[currentPoint], DIM);
+		
+		//store cluster
+		psramCluster[file_number * NUM_OF_POINTS_PER_FILE + currentPoint] = varImgCluster[currentPoint];
+	}
+}	
+#else
 void writePoints(char * path, uint16_t file_number) {
 
 	#ifdef DATASET_ON_FLASH
@@ -267,6 +336,7 @@ void writePoints(char * path, uint16_t file_number) {
 
 	fclose(f);
 }
+#endif
 
 void assignLabelToCluster()
 {
@@ -284,7 +354,11 @@ void assignLabelToCluster()
 
 		file_iterator = 0;
 		//load first 'NUM_OF_POINTS_PER_FILE' images
+		#ifdef DATASET_IN_PSRAM
+		loadPoints(file_iterator);
+		#else
 		readPoints(bin_train, file_iterator);
+		#endif
 		//Counting labels for cluster i	
 		for (uint16_t j = 0; j < n; j++)
 		{
@@ -292,7 +366,11 @@ void assignLabelToCluster()
 			if (file_point_iterator == 0 && j != 0) {
 				file_iterator++;
 				//load next 'NUM_OF_POINTS_PER_FILE' images
+				#ifdef DATASET_IN_PSRAM
+				loadPoints(file_iterator);
+				#else
 				readPoints(bin_train, file_iterator);
+				#endif
 			}
 			
 			if (varImgCluster[file_point_iterator] == i)
@@ -321,14 +399,22 @@ double calculateTrainingAccuracy()
 	uint8_t file_point_iterator;
 
 	//load first 'NUM_OF_POINTS_PER_FILE' images
-	readPoints(bin_train, file_iterator); 
+	#ifdef DATASET_IN_PSRAM
+	loadPoints(file_iterator);
+	#else
+	readPoints(bin_train, file_iterator);
+	#endif 
 	for (int i = 0; i < n; i++)
 	{
 		file_point_iterator = i % NUM_OF_POINTS_PER_FILE;
 		if (file_point_iterator == 0 && i != 0) {
 			file_iterator++;
 			//load next 'NUM_OF_POINTS_PER_FILE' images
+			#ifdef DATASET_IN_PSRAM
+			loadPoints(file_iterator);
+			#else
 			readPoints(bin_train, file_iterator); 
+			#endif
 		}
 
 		if (varImgLabel[file_point_iterator] == label_clust[varImgCluster[file_point_iterator]])
@@ -375,10 +461,14 @@ void kMeansClustering()
 	srand(time(0));  //set the random seed
 	#endif
 
+	#ifdef DATASET_IN_PSRAM
+	loadRandomPoints();
+	#else
 	for (uint8_t i = 0; i < K; i++) {
 		//init centroids (random)
 		readRandomPoint(bin_train, i);
 	}
+	#endif
 	#ifdef DEBUG
 		printf("Centroids initialized\n");
 	#endif
@@ -429,19 +519,30 @@ void kMeansClustering()
 
 		file_iterator = 0;
 		//load first 'NUM_OF_POINTS_PER_FILE' images
+		#ifdef DATASET_IN_PSRAM
+		loadPoints(file_iterator);
+		#else
 		readPoints(bin_train, file_iterator);
+		#endif
 		for (uint16_t i = 0; i < n; i++) {
 
 			//track number of point inside each file
 			file_point_iterator = i % NUM_OF_POINTS_PER_FILE;
 			if (file_point_iterator == 0 && i != 0) {
-
+				#ifdef DATASET_IN_PSRAM
+				storePoints(file_iterator);
+				#else
 				writePoints(bin_train, file_iterator); 
-				
+				#endif
+
 				file_iterator++;
 
 				//load next 'NUM_OF_POINTS_PER_FILE' images
+				#ifdef DATASET_IN_PSRAM
+				loadPoints(file_iterator);
+				#else
 				readPoints(bin_train, file_iterator); 
+				#endif
 			}
 
 			minDist = __INT_MAX__;
@@ -462,7 +563,11 @@ void kMeansClustering()
 				sum[coor][clusterId] += varImgCoor[file_point_iterator][coor];
 			}
 		}
+		#ifdef DATASET_IN_PSRAM
+		storePoints(file_iterator);
+		#else
 		writePoints(bin_train, file_iterator); 
+		#endif 
 		
 		/*
 		//Old code version
@@ -720,6 +825,91 @@ void app_main(void)
     }
     ESP_LOGI(TAG, "Filesystem mounted");
 	#endif
+	#ifdef DATASET_IN_PSRAM
+	//Init file system
+    ESP_LOGI(TAG, "Initializing SPIFFS");
+
+    esp_vfs_spiffs_conf_t conf = {
+      .base_path = "/spiffs",
+      .partition_label = NULL,
+      .max_files = 5,
+      .format_if_mount_failed = true
+    };
+
+    // Use settings defined above to initialize and mount SPIFFS filesystem.
+    // Note: esp_vfs_spiffs_register is an all-in-one convenience function.
+    esp_err_t ret = esp_vfs_spiffs_register(&conf);
+
+    if (ret != ESP_OK) {
+        if (ret == ESP_FAIL) {
+            ESP_LOGE(TAG, "Failed to mount or format filesystem");
+        } else if (ret == ESP_ERR_NOT_FOUND) {
+            ESP_LOGE(TAG, "Failed to find SPIFFS partition");
+        } else {
+            ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
+        }
+        return;
+    }
+
+    size_t total = 0, used = 0;
+    ret = esp_spiffs_info(conf.partition_label, &total, &used);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s). Formatting...", esp_err_to_name(ret));
+        esp_spiffs_format(conf.partition_label);
+        return;
+    } else {
+        ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
+    }
+
+    // Check consistency of reported partition size info.
+    if (used > total) {
+        ESP_LOGW(TAG, "Number of used bytes cannot be larger than total. Performing SPIFFS_check().");
+        ret = esp_spiffs_check(conf.partition_label);
+        // Could be also used to mend broken files, to clean unreferenced pages, etc.
+        // More info at https://github.com/pellepl/spiffs/wiki/FAQ#powerlosses-contd-when-should-i-run-spiffs_check
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "SPIFFS_check() failed (%s)", esp_err_to_name(ret));
+            return;
+        } else {
+            ESP_LOGI(TAG, "SPIFFS_check() successful");
+        }
+    }
+	#endif
+
+	#ifdef DATASET_IN_PSRAM
+	//Fill arrays in PSRAM with data from flash
+
+	for (uint16_t file_num = 0; file_num < NUM_OF_FILES; file_num++) {
+		char new_path[50]; 
+		sprintf(new_path, "/spiffs%s_%d.bin", bin_train, file_num);
+		FILE* f = fopen(new_path, "rb");
+		if (f == NULL) {
+			ESP_LOGE(TAG, "Failed to open file for reading");
+			return;
+		}
+
+		//iterate over 1 file with 'NUM_OF_POINTS_PER_FILE' points
+		for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
+			//read label
+			fread(&psramLabel[(file_num * NUM_OF_POINTS_PER_FILE) + currentPoint], 1, 1, f);
+
+			//read coordinates
+			fread(psramCoor[(file_num * NUM_OF_POINTS_PER_FILE) + currentPoint], 1, DIM, f);
+
+			//read cluster
+			fread(&psramCluster[(file_num * NUM_OF_POINTS_PER_FILE) + currentPoint], 1, 1, f);
+
+			#ifdef PRINT_FILES
+			printf("Point %d from file %d:\n", currentPoint, file_num);
+			printf("%d ", psramLabel[(file_num * NUM_OF_POINTS_PER_FILE) + currentPoint]);
+			for (int i = 0 ; i < DIM; i++)
+				printf("%d ", psramCoor[(file_num * NUM_OF_POINTS_PER_FILE) + currentPoint][i]);
+			printf("%d \n\n", psramCluster[(file_num * NUM_OF_POINTS_PER_FILE) + currentPoint]);
+			#endif
+		}
+		fclose(f);
+	}
+	#endif
 
     printf("TRAINING STARTED.\n");
 
@@ -792,7 +982,7 @@ void app_main(void)
 	#ifdef DATASET_ON_SD
 	sprintf(result, "/sdcard%s_k%d.bin", result_path, K); 
 	#endif
-	#ifdef DATASET_ON_PSRAM
+	#ifdef DATASET_IN_PSRAM
 	sprintf(result, "/spiffs%s_k%d.bin", result_path, K); 
 	#endif
 

@@ -229,7 +229,7 @@ void testPSRAM() {
     //Start measuring time
     start_time = esp_timer_get_time();	
 
-    //Fill array in PSRAM with random data
+    //Fill arrays in PSRAM with random data
     for (uint16_t i = 0; i < NUM_OF_FILES * NUM_OF_POINTS_PER_FILE; i++) {
         psramCluster[i] = i;
         psramLabel[i] = (NUM_OF_POINTS_PER_FILE * NUM_OF_FILES) - i;
