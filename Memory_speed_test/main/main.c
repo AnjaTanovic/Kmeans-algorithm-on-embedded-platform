@@ -87,6 +87,7 @@ void esp32printInfo() {
     printf("Minimum free heap size: %" PRIu32 " bytes\n", esp_get_minimum_free_heap_size());
 }
 
+#ifdef TEST_CASE_FLASH
 void testFLASH() {
     //Variables for time measuring
     uint64_t start_time, end_time;
@@ -219,7 +220,9 @@ void testFLASH() {
     esp_vfs_spiffs_unregister(conf.partition_label);
     ESP_LOGI(TAG_flash, "SPIFFS unmounted");
 }
+#endif
 
+#ifdef TEST_CASE_PSRAM
 void testPSRAM() {
     //Variables for time measuring
     uint64_t start_time, end_time;
@@ -258,7 +261,7 @@ void testPSRAM() {
         //read coordinates
         /*
         for (uint16_t coor = 0; coor < DIM; coor++)
-           dataCoor[currentPoint][coor] = psramCoor[currentPoint][coor];
+            dataCoor[currentPoint % NUM_OF_POINTS_PER_FILE][coor] = psramCoor[currentPoint][coor];
         */
         memcpy(dataCoor[currentPoint % NUM_OF_POINTS_PER_FILE], psramCoor[currentPoint], DIM);
 
@@ -285,8 +288,11 @@ void testPSRAM() {
         psramLabel[currentPoint] = currentPoint;
 
         //write coordinates
+        /*
         for (uint16_t coor = 0; coor < DIM; coor++)
-            psramCoor[currentPoint][coor] = coor;
+            psramCoor[currentPoint][coor] = dataCoor[currentPoint % NUM_OF_POINTS_PER_FILE][coor];
+        */
+        memcpy(psramCoor[currentPoint], dataCoor[currentPoint % NUM_OF_POINTS_PER_FILE], DIM);
 
         //write cluster
         psramCluster[currentPoint] = currentPoint;
@@ -300,7 +306,10 @@ void testPSRAM() {
     speed = (bytes / (double)duration) * 1000000.0 / (1024.0 * 1024.0); // Speed in megabytes per second
     printf("Write speed: %.6lf MB/s\n\n", speed);  
 }
+#endif
 
+
+#ifdef TEST_CASE_SD
 void testSD() {
     //Variables for time measuring
     uint64_t start_time, end_time;
@@ -412,6 +421,7 @@ void testSD() {
     esp_vfs_fat_sdcard_unmount(mount_point, card);
     ESP_LOGI(TAG_sd, "Card unmounted");
 }
+#endif
 
 void app_main(void)
 {
@@ -432,4 +442,6 @@ void app_main(void)
     #ifdef TEST_CASE_SD
         testSD();
     #endif
+
+    printf("Testing finished.\n");
 }
