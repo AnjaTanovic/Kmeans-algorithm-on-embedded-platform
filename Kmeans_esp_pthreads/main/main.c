@@ -30,8 +30,8 @@
 
 //Define only one case!!!
 //#define DATASET_ON_FLASH
-#define DATASET_ON_SD
-//#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
+//#define DATASET_ON_SD
+#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
 							//results are stored on flash (for potential later usage)
 							//flash is used because it saves data during sleep
 
@@ -499,9 +499,6 @@ void kMeansClustering()
     }
 	
 	bool changed = true;
-
-	uint16_t file_iterator;			//define which file is now using 
-	uint8_t file_point_iterator;	//define on which image is now computing 
 	
 	for (uint16_t iter = 0; iter < EPOCHS; iter++)
 	{
@@ -510,8 +507,7 @@ void kMeansClustering()
 		// Yield control to other tasks (scheduler tasks, IDLE task...)
         vTaskDelay(10 / portTICK_PERIOD_MS);	//10 ms delay (default tick period is 10ms, so any delay of less than 10ms results in a 0 delay) 
 
-		//New code version
-		//for each image calculate the closest cluster and sum it for new centroids
+		//For each image calculate the closest cluster and sum it for new centroids
 		//this approach reduces reading and writing to files
 
 		// Initialize nPoints and sum with zeroes
@@ -524,153 +520,46 @@ void kMeansClustering()
 			}
 		}
 
-		file_iterator = 0;
-		//load first 'NUM_OF_POINTS_PER_FILE' images
-		#ifdef DATASET_IN_PSRAM
-		loadPoints(file_iterator);
-		#else
-		readPoints(bin_train, file_iterator);
-		#endif
-		for (uint16_t i = 0; i < n; i++) {
-
-			//track number of point inside each file
-			file_point_iterator = i % NUM_OF_POINTS_PER_FILE;
-			if (file_point_iterator == 0 && i != 0) {
-				#ifdef DATASET_IN_PSRAM
-				storePoints(file_iterator);
-				#else
-				writePoints(bin_train, file_iterator); 
-				#endif
-
-				file_iterator++;
-
-				//load next 'NUM_OF_POINTS_PER_FILE' images
-				#ifdef DATASET_IN_PSRAM
-				loadPoints(file_iterator);
-				#else
-				readPoints(bin_train, file_iterator); 
-				#endif
-			}
-
-			minDist = __INT_MAX__;
-			//find the closest cluster
-			for (uint8_t c = 0; c < K; c++) {
-				dist = distance(cntrCoor[c], varImgCoor[file_point_iterator]);
-			    if (dist < minDist) 
-			    {
-					minDist = dist;
-					varImgCluster[file_point_iterator] = c;
-			    }
-			}
-
-			clusterId = varImgCluster[file_point_iterator];
-			nPoints[clusterId] += 1;
-			for (int coor = 0; coor < DIM; coor++)
-			{
-				sum[coor][clusterId] += varImgCoor[file_point_iterator][coor];
-			}
-		}
-		#ifdef DATASET_IN_PSRAM
-		storePoints(file_iterator);
-		#else
-		writePoints(bin_train, file_iterator); 
-		#endif 
-		
-		/*
-		//Old code version
-		for (uint8_t c = 0; c < K; c++) 
-		{
-			#ifdef DEBUG
-				printf("Calculating for centroid number ");
-				printf("%d\n", c);
+		//New loop organization adapted for threading:
+		//Each thread is responsible for ONE FILE (reading and writing), so each thread is 
+		//working with the NUM_OF_POINTS_PER_FILE points.
+		//The only independences are nPoints and sum arrays 
+		for (uint8_t file_iterator = 0; file_iterator < NUM_OF_FILES; file_iterator++) {
+			//load 'NUM_OF_POINTS_PER_FILE' images
+			#ifdef DATASET_IN_PSRAM
+			loadPoints(file_iterator);
+			#else
+			readPoints(bin_train, file_iterator);
 			#endif
 
-			file_iterator = 0;
-			//load first 'NUM_OF_POINTS_PER_FILE' images
-			readPoints(bin_train, file_iterator);
-			for (uint16_t i = 0; i < n; i++) 
-			{
-				file_point_iterator = i % NUM_OF_POINTS_PER_FILE;
-				if (file_point_iterator == 0 && i != 0) {
+			for (uint16_t file_point_iterator = 0; file_point_iterator < NUM_OF_POINTS_PER_FILE; file_point_iterator++) {
+				//For each image, calculate which cluster is the closest
 
-					if (update) {
-						writePoints(bin_train, file_iterator); 
+				minDist = __INT_MAX__;
+				for (uint8_t c = 0; c < K; c++) {
+					dist = distance(cntrCoor[c], varImgCoor[file_point_iterator]);
+					if (dist < minDist) 
+					{
+						minDist = dist;
+						varImgCluster[file_point_iterator] = c;
 					}
-
-					update = false;
-					file_iterator++;
-
-					//load next 'NUM_OF_POINTS_PER_FILE' images
-					readPoints(bin_train, file_iterator); 
 				}
 
-			    dist = distance(cntrCoor[c], varImgCoor[file_point_iterator]);
-			    if (dist < varImgMinDist[file_point_iterator]) 
-			    {
-					varImgMinDist[file_point_iterator] = dist;
-					varImgCluster[file_point_iterator] = c;
-					update = true;
-			    }
-			}
-			//update last 'NUM_OF_POINTS_PER_FILE' points
-			if (update) {
-				writePoints(bin_train, file_iterator); 
-				update = false;
+				clusterId = varImgCluster[file_point_iterator];
+				nPoints[clusterId] += 1;
+				for (int coor = 0; coor < DIM; coor++)
+				{
+					sum[coor][clusterId] += varImgCoor[file_point_iterator][coor];
+				}
 			}
 
+			//store 'NUM_OF_POINTS_PER_FILE' images
+			#ifdef DATASET_IN_PSRAM
+			storePoints(file_iterator);
+			#else
+			writePoints(bin_train, file_iterator); 
+			#endif
 		}
-
-		#ifdef DEBUG
-			printf("Distances calculated\n");
-		#endif
-
-		// Initialize nPoints and sum with zeroes
-		for (uint8_t j = 0; j < K; ++j) 
-		{
-			nPoints[j] = 0;
-			for (uint16_t i = 0; i < DIM; i++)
-			{
-				sum[i][j] = 0.0;
-			}
-		}
-		
-		#ifdef DEBUG
-			printf("Arrays nPoints and sum initialized\n");
-		#endif
-
-		// Iterate over points to append data to centroids
-		file_iterator = 0;
-		//load first 'NUM_OF_POINTS_PER_FILE' images
-		readPoints(bin_train, file_iterator);
-		
-		for (uint16_t i = 0; i < n; i++) 
-		{
-			file_point_iterator = i % NUM_OF_POINTS_PER_FILE;	
-			if (file_point_iterator == 0 && i != 0) {
-				writePoints(bin_train, file_iterator); 
-
-				file_iterator++;
-
-				//load next 'NUM_OF_POINTS_PER_FILE' images
-				readPoints(bin_train, file_iterator); 
-			}
-
-			clusterId = varImgCluster[file_point_iterator];
-			nPoints[clusterId] += 1;
-			for (int i = 0; i < DIM; i++)
-			{
-				sum[i][clusterId] += varImgCoor[file_point_iterator][i];
-			}
-			//point.minDist = __INT_MAX__;  // reset distance
-			varImgMinDist[file_point_iterator] = __INT_MAX__;
-		}
-		//update last 'NUM_OF_POINTS_PER_FILE' points
-		writePoints(bin_train, file_iterator); 
-
-		#ifdef DEBUG
-			printf("Sum 2d array for centroids computed\n");
-		#endif
-		*/
 
 		// Compute the new centroids using sum arrays
 		for (uint8_t c = 0; c < K; c++) 
