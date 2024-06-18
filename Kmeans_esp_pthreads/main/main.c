@@ -30,8 +30,8 @@
 
 //Define only one case!!!
 //#define DATASET_ON_FLASH
-//#define DATASET_ON_SD
-#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
+#define DATASET_ON_SD
+//#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
 							//results are stored on flash (for potential later usage)
 							//flash is used because it saves data during sleep
 
@@ -452,6 +452,57 @@ uint8_t predict(uint8_t point)
 	return varImgLabel[point];
 }
 
+pthread_mutex_t mutexSum;
+
+static void *processDataFile(void * arg)
+{
+    uint8_t file_iterator = *(uint8_t *) arg;
+	free(arg);
+
+	int dist; 					//used for distance function
+	int minDist;				//used for tracking minimal distance for current point
+	uint8_t clusterId;			//used for sum and nPoints arrays
+
+	//load 'NUM_OF_POINTS_PER_FILE' images
+	#ifdef DATASET_IN_PSRAM
+	loadPoints(file_iterator);
+	#else
+	readPoints(bin_train, file_iterator);
+	#endif
+
+	for (uint16_t file_point_iterator = 0; file_point_iterator < NUM_OF_POINTS_PER_FILE; file_point_iterator++) {
+		//For each image, calculate which cluster is the closest
+
+		minDist = __INT_MAX__;
+		for (uint8_t c = 0; c < K; c++) {
+			dist = distance(cntrCoor[c], varImgCoor[file_point_iterator]);
+			if (dist < minDist) 
+			{
+				minDist = dist;
+				varImgCluster[file_point_iterator] = c;
+			}
+		}
+
+		clusterId = varImgCluster[file_point_iterator];
+		pthread_mutex_lock(&mutexSum);
+		nPoints[clusterId] += 1;
+		for (int coor = 0; coor < DIM; coor++)
+		{
+			sum[coor][clusterId] += varImgCoor[file_point_iterator][coor];
+		}
+		pthread_mutex_unlock(&mutexSum);
+	}
+
+	//store 'NUM_OF_POINTS_PER_FILE' images
+	#ifdef DATASET_IN_PSRAM
+	storePoints(file_iterator);
+	#else
+	writePoints(bin_train, file_iterator); 
+	#endif
+
+    return NULL;
+}
+
 void kMeansClustering()
 {
 	#ifdef DEBUG
@@ -476,10 +527,6 @@ void kMeansClustering()
 	#ifdef DEBUG
 		printf("Centroids initialized\n");
 	#endif
-
-	int dist; 					//used for distance function
-	int minDist;				//used for tracking minimal distance for current point
-	uint8_t clusterId;			//used for sum and nPoints arrays
 
 	// Allocate memory for the array of pointers
 	sum = (uint16_t **)malloc(DIM * sizeof(uint16_t *));
@@ -523,42 +570,32 @@ void kMeansClustering()
 		//New loop organization adapted for threading:
 		//Each thread is responsible for ONE FILE (reading and writing), so each thread is 
 		//working with the NUM_OF_POINTS_PER_FILE points.
-		//The only independences are nPoints and sum arrays 
-		for (uint8_t file_iterator = 0; file_iterator < NUM_OF_FILES; file_iterator++) {
-			//load 'NUM_OF_POINTS_PER_FILE' images
-			#ifdef DATASET_IN_PSRAM
-			loadPoints(file_iterator);
-			#else
-			readPoints(bin_train, file_iterator);
-			#endif
+		//The only independences are nPoints and sum arrays
 
-			for (uint16_t file_point_iterator = 0; file_point_iterator < NUM_OF_POINTS_PER_FILE; file_point_iterator++) {
-				//For each image, calculate which cluster is the closest
+		for (uint8_t i = 0; i < NUM_OF_FILES; i += 2) {
+			//Using two threads (Dual core processor)
+			pthread_t thread1, thread2;
+			pthread_mutex_init(&mutexSum, NULL);
 
-				minDist = __INT_MAX__;
-				for (uint8_t c = 0; c < K; c++) {
-					dist = distance(cntrCoor[c], varImgCoor[file_point_iterator]);
-					if (dist < minDist) 
-					{
-						minDist = dist;
-						varImgCluster[file_point_iterator] = c;
-					}
-				}
+			uint8_t* file_iterator1 = malloc(sizeof(uint8_t));
+        	*file_iterator1 = i;
+			uint8_t* file_iterator2 = malloc(sizeof(uint8_t));
+        	*file_iterator2 = i + 1;
 
-				clusterId = varImgCluster[file_point_iterator];
-				nPoints[clusterId] += 1;
-				for (int coor = 0; coor < DIM; coor++)
-				{
-					sum[coor][clusterId] += varImgCoor[file_point_iterator][coor];
-				}
+			if (pthread_create(&thread1, NULL, processDataFile, (void *)file_iterator1) != 0) {
+				perror("Failed to create thread");
+			}
+			if (pthread_create(&thread2, NULL, processDataFile, (void *)file_iterator2) != 0) {
+				perror("Failed to create thread");
 			}
 
-			//store 'NUM_OF_POINTS_PER_FILE' images
-			#ifdef DATASET_IN_PSRAM
-			storePoints(file_iterator);
-			#else
-			writePoints(bin_train, file_iterator); 
-			#endif
+			if (pthread_join(thread1, NULL) != 0) {
+				perror("Failed to join thread");
+			}
+			if (pthread_join(thread2, NULL) != 0) {
+				perror("Failed to join thread");
+			}
+			pthread_mutex_destroy(&mutexSum);
 		}
 
 		// Compute the new centroids using sum arrays
