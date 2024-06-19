@@ -26,8 +26,8 @@
 
 //Define only one case!!!
 //#define DATASET_ON_FLASH
-#define DATASET_ON_SD
-//#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
+//#define DATASET_ON_SD
+#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
 							//results are stored on flash (for potential later usage)
 							//flash is used because it saves data during sleep
 
@@ -45,7 +45,7 @@ static const char *TAG = "FileSystem";
 #define TEST_NUM 10000		//number of test images
 #define DIM 196				//number of dimensions
 
-#define K 10
+#define K 200
 /*
 K is number of clusters (	1.option - defined as macro,
 							2.option - defined as max, for example 500

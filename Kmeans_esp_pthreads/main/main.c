@@ -30,8 +30,8 @@
 
 //Define only one case!!!
 //#define DATASET_ON_FLASH
-#define DATASET_ON_SD
-//#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
+//#define DATASET_ON_SD
+#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
 							//results are stored on flash (for potential later usage)
 							//flash is used because it saves data during sleep
 
@@ -49,7 +49,7 @@ static const char *TAG = "FileSystem";
 #define TEST_NUM 10000		//number of test images
 #define DIM 196				//number of dimensions
 
-#define K 10
+#define K 200
 /*
 K is number of clusters (	1.option - defined as macro,
 							2.option - defined as max, for example 500
@@ -99,13 +99,13 @@ int imgMinDist[TRAIN_NUM];				// distance to nearest cluster for every image, de
 
 //CENTROID arrays
 uint8_t cntrCoor[K][DIM];				// coordinates for every image (2d array) 
-uint8_t cntrCluster[K];				// nearest cluster for every image, no default cluster (default is -1, which is 65535)
+uint8_t cntrCluster[K];					// nearest cluster for every image, no default cluster (default is -1, which is 65535)
 uint8_t cntrLabel[K];					// label from csv file for every image
 
-//Variable image point
-uint8_t varImgCoor[NUM_OF_POINTS_PER_FILE][DIM];				// coordinates for image 
-uint8_t varImgCluster[NUM_OF_POINTS_PER_FILE];				// nearest cluster for variable image, no default cluster
-uint8_t varImgLabel[NUM_OF_POINTS_PER_FILE];					// label from csv file for variable image
+//Variable image point (one block of data for each thread)
+uint8_t varImgCoor[NUM_OF_POINTS_PER_FILE*2][DIM];				// coordinates for image 
+uint8_t varImgCluster[NUM_OF_POINTS_PER_FILE*2];				// nearest cluster for variable image, no default cluster
+uint8_t varImgLabel[NUM_OF_POINTS_PER_FILE*2];					// label from csv file for variable image
 
 #ifdef DATASET_IN_PSRAM
 //arrays in external RAM (PSRAM) where dataset is stored
@@ -215,27 +215,31 @@ void readRandomPoint(char * path, uint8_t number_of_centroid) {
 #endif
 
 #ifdef DATASET_IN_PSRAM
-void loadPoints(uint16_t file_number) {
+void loadPoints(uint16_t file_number, uint8_t block) {
+	uint16_t block_part = block * NUM_OF_POINTS_PER_FILE;
+	uint16_t file_part = file_number * NUM_OF_POINTS_PER_FILE;
+
 	for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
 		//load label
-		varImgLabel[currentPoint] = psramLabel[file_number * NUM_OF_POINTS_PER_FILE + currentPoint];
+		varImgLabel[block_part + currentPoint] = psramLabel[file_part + currentPoint];
 
 		//load coordinates
 		/*
 		for (uint8_t i = 0; i < DIM; i++)
-			varImgCoor[currentPoint][i] = psramCoor[file_num * NUM_OF_POINTS_PER_FILE + currentPoint][i];
+			varImgCoor[block_part + currentPoint][i] = psramCoor[file_part + currentPoint][i];
 		*/
-		memcpy(varImgCoor[currentPoint], psramCoor[file_number * NUM_OF_POINTS_PER_FILE + currentPoint], DIM);
+		memcpy(varImgCoor[block_part + currentPoint], psramCoor[file_part + currentPoint], DIM);
 		
 		//load cluster
-		varImgCluster[currentPoint] = psramCluster[file_number * NUM_OF_POINTS_PER_FILE + currentPoint];
+		varImgCluster[block_part + currentPoint] = psramCluster[file_part + currentPoint];
 	}
 }
 #else
-void readPoints(char * path, uint16_t file_number) {
+void readPoints(char * path, uint16_t file_number, uint8_t block) {
 
 	//Points are always read in the same variables for image (varImgCoor[NUM_OF_POINTS_PER_FILE][DIM], varImgCluster[NUM_OF_POINTS_PER_FILE], 
 	//varImgLabel[NUM_OF_POINTS_PER_FILE])
+	//but there are two blocks, for two threads
 
 	#ifdef DATASET_ON_FLASH
 	char new_path[50]; 
@@ -256,23 +260,25 @@ void readPoints(char * path, uint16_t file_number) {
     }
 	#endif
 
+	uint16_t block_part = block * NUM_OF_POINTS_PER_FILE;
+
 	//iterate over 1 file with 'NUM_OF_POINTS_PER_FILE' points
 	for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
 		//read label
-		fread(&varImgLabel[currentPoint], 1, 1, f);
+		fread(&varImgLabel[block_part + currentPoint], 1, 1, f);
 
 		//read coordinates
-		fread(varImgCoor[currentPoint], 1, DIM, f);
+		fread(varImgCoor[block_part + currentPoint], 1, DIM, f);
 
 		//read cluster
-		fread(&varImgCluster[currentPoint], 1, 1, f);
+		fread(&varImgCluster[block_part + currentPoint], 1, 1, f);
 
 		#ifdef PRINT_FILES
 		printf("Point %d from file %d:\n", currentPoint, file_number);
-		printf("%d ", varImgLabel[currentPoint]);
+		printf("%d ", varImgLabel[block_part + currentPoint]);
 		for (int i = 0 ; i < DIM; i++)
-			printf("%d ", varImgCoor[currentPoint][i]);
-		printf("%d \n\n", varImgCluster[currentPoint]);
+			printf("%d ", varImgCoor[block_part + currentPoint][i]);
+		printf("%d \n\n", varImgCluster[block_part + currentPoint]);
 		#endif
 	}
 
@@ -281,24 +287,27 @@ void readPoints(char * path, uint16_t file_number) {
 #endif
 
 #ifdef DATASET_IN_PSRAM
-void storePoints(uint16_t file_number) {
+void storePoints(uint16_t file_number, uint8_t block) {
+	uint16_t block_part = block * NUM_OF_POINTS_PER_FILE;
+	uint16_t file_part = file_number * NUM_OF_POINTS_PER_FILE;
+
 	for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
 		//store label
-		psramLabel[file_number * NUM_OF_POINTS_PER_FILE + currentPoint] = varImgLabel[currentPoint];
+		psramLabel[file_part + currentPoint] = varImgLabel[block_part + currentPoint];
 
 		//store coordinates
 		/*
 		for (uint8_t i = 0; i < DIM; i++)
-			psramCoor[file_num * NUM_OF_POINTS_PER_FILE + currentPoint][i] = varImgCoor[currentPoint][i];
+			psramCoor[file_part + currentPoint][i] = varImgCoor[block_part + currentPoint][i];
 		*/
-		memcpy(psramCoor[file_number * NUM_OF_POINTS_PER_FILE + currentPoint], varImgCoor[currentPoint], DIM);
+		memcpy(psramCoor[file_part + currentPoint], varImgCoor[block_part + currentPoint], DIM);
 		
 		//store cluster
-		psramCluster[file_number * NUM_OF_POINTS_PER_FILE + currentPoint] = varImgCluster[currentPoint];
+		psramCluster[file_part + currentPoint] = varImgCluster[block_part + currentPoint];
 	}
 }	
 #else
-void writePoints(char * path, uint16_t file_number) {
+void writePoints(char * path, uint16_t file_number, uint8_t block) {
 
 	#ifdef DATASET_ON_FLASH
 	char new_path[50]; 
@@ -319,19 +328,21 @@ void writePoints(char * path, uint16_t file_number) {
     }
 	#endif
 			
+	uint16_t block_part = block * NUM_OF_POINTS_PER_FILE;
+
 	// Reset file position to beginning (FILE_WRITE opens at the end of the file)
     fseek(f, 0, SEEK_SET);
 
 	//iterate over 1 file with 'NUM_OF_POINTS_PER_FILE' points
 	for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
 		//write label
-		fwrite(&varImgLabel[currentPoint], 1, 1, f);
+		fwrite(&varImgLabel[block_part + currentPoint], 1, 1, f);
 
 		//write coordinates
-		fwrite(varImgCoor[currentPoint], 1, DIM, f);
+		fwrite(varImgCoor[block_part + currentPoint], 1, DIM, f);
 
 		//write cluster
-		fwrite(&varImgCluster[currentPoint], 1, 1, f);
+		fwrite(&varImgCluster[block_part + currentPoint], 1, 1, f);
 
 		/*
 		fwrite(writeData, 1, DIM+2, f);  // Write all bytes of point at once
@@ -341,7 +352,7 @@ void writePoints(char * path, uint16_t file_number) {
 	fclose(f);
 }
 #endif
-
+/*
 void assignLabelToCluster()
 {
 	uint16_t label_num[K];   //contains the number of label occurence in one cluster
@@ -428,7 +439,7 @@ double calculateTrainingAccuracy()
 	}
 	return (double)correct_labels/(double)total_labels;
 }
-
+*/
 uint8_t predict(uint8_t point)
 {
 	//uint8_t lab;
@@ -459,15 +470,20 @@ static void *processDataFile(void * arg)
     uint8_t file_iterator = *(uint8_t *) arg;
 	free(arg);
 
+	//if file iterator is even number (0, 2...) first blocks of varImg arrays are used
+	//otherwise (1, 3...), second blocks
+	uint8_t block = file_iterator % 2;
+	uint16_t block_part = block * NUM_OF_POINTS_PER_FILE;
+
 	int dist; 					//used for distance function
 	int minDist;				//used for tracking minimal distance for current point
 	uint8_t clusterId;			//used for sum and nPoints arrays
 
 	//load 'NUM_OF_POINTS_PER_FILE' images
 	#ifdef DATASET_IN_PSRAM
-	loadPoints(file_iterator);
+	loadPoints(file_iterator, block);
 	#else
-	readPoints(bin_train, file_iterator);
+	readPoints(bin_train, file_iterator, block);
 	#endif
 
 	for (uint16_t file_point_iterator = 0; file_point_iterator < NUM_OF_POINTS_PER_FILE; file_point_iterator++) {
@@ -475,29 +491,29 @@ static void *processDataFile(void * arg)
 
 		minDist = __INT_MAX__;
 		for (uint8_t c = 0; c < K; c++) {
-			dist = distance(cntrCoor[c], varImgCoor[file_point_iterator]);
+			dist = distance(cntrCoor[c], varImgCoor[block_part + file_point_iterator]);
 			if (dist < minDist) 
 			{
 				minDist = dist;
-				varImgCluster[file_point_iterator] = c;
+				varImgCluster[block_part + file_point_iterator] = c;
 			}
 		}
 
-		clusterId = varImgCluster[file_point_iterator];
+		clusterId = varImgCluster[block_part + file_point_iterator];
 		pthread_mutex_lock(&mutexSum);
 		nPoints[clusterId] += 1;
 		for (int coor = 0; coor < DIM; coor++)
 		{
-			sum[coor][clusterId] += varImgCoor[file_point_iterator][coor];
+			sum[coor][clusterId] += varImgCoor[block_part + file_point_iterator][coor];
 		}
 		pthread_mutex_unlock(&mutexSum);
 	}
 
 	//store 'NUM_OF_POINTS_PER_FILE' images
 	#ifdef DATASET_IN_PSRAM
-	storePoints(file_iterator);
+	storePoints(file_iterator, block);
 	#else
-	writePoints(bin_train, file_iterator); 
+	writePoints(bin_train, file_iterator, block); 
 	#endif
 
     return NULL;
@@ -686,36 +702,6 @@ void app_main(void)
 
     printf("Minimum free heap size: %" PRIu32 " bytes\n", esp_get_minimum_free_heap_size());
 
-/*
-	//Test pthreads
-	pthread_attr_t attr;
-    pthread_t thread1, thread2;
-    esp_pthread_cfg_t esp_pthread_cfg;
-    int res;
-
-	uint64_t sum1 = 1;
-	uint64_t sum2 = 2;
-
-    // Create a pthread with the default parameters
-    res = pthread_create(&thread1, NULL, example_thread, (void *)&sum1);
-    assert(res == 0);
-    printf("Created thread 0x%"PRIx32"\n", thread1);
-
-    // Create a pthread with a larger stack size using the standard API
-    res = pthread_attr_init(&attr);
-    assert(res == 0);
-    pthread_attr_setstacksize(&attr, 16384);
-    res = pthread_create(&thread2, &attr, example_thread, (void *)&sum2);
-    assert(res == 0);
-    printf("Created larger stack thread 0x%"PRIx32"\n", thread2);
-
-    res = pthread_join(thread1, NULL);
-    assert(res == 0);
-    res = pthread_join(thread2, NULL);
-    assert(res == 0);
-    printf("Threads have exited\n\n");
-*/
-
     #ifdef DATASET_ON_FLASH
 	//Init file system
     ESP_LOGI(TAG, "Initializing SPIFFS");
@@ -766,6 +752,7 @@ void app_main(void)
         }
     }
 	#endif
+
 	#ifdef DATASET_ON_SD
 	//Init SD card
   	ESP_LOGI(TAG, "Initializing SD card");
@@ -795,6 +782,7 @@ void app_main(void)
     }
     ESP_LOGI(TAG, "Filesystem mounted");
 	#endif
+
 	#ifdef DATASET_IN_PSRAM
 	//Init file system
     ESP_LOGI(TAG, "Initializing SPIFFS");
@@ -891,7 +879,7 @@ void app_main(void)
 	//Training
 	//Execute k-means algorithm
 	kMeansClustering(); 
-
+/*
     //Calculate which cluster is which number (result is in label_clust array)
 	assignLabelToCluster();
 	
@@ -994,7 +982,7 @@ void app_main(void)
 	fclose(f);
 	#endif
 	#endif
-
+*/
 	// Free memory
     for (int i = 0; i < DIM; i++) {
         free(sum[i]); // Free memory for each row
