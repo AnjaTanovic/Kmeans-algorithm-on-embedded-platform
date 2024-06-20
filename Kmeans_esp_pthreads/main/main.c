@@ -29,9 +29,9 @@
 //#define PRINT_FILES
 
 //Define only one case!!!
-//#define DATASET_ON_FLASH
+#define DATASET_ON_FLASH
 //#define DATASET_ON_SD
-#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
+//#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
 							//results are stored on flash (for potential later usage)
 							//flash is used because it saves data during sleep
 
@@ -215,141 +215,143 @@ void readRandomPoint(char * path, uint8_t number_of_centroid) {
 #endif
 
 #ifdef DATASET_IN_PSRAM
-void loadPoints(uint16_t file_number, uint8_t block) {
-	uint16_t block_part = block * NUM_OF_POINTS_PER_FILE;
+void loadPoints(uint16_t file_number) {
 	uint16_t file_part = file_number * NUM_OF_POINTS_PER_FILE;
 
-	for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
+	for (uint16_t currentPoint = 0; currentPoint < (NUM_OF_POINTS_PER_FILE * 2); currentPoint++) {
 		//load label
-		varImgLabel[block_part + currentPoint] = psramLabel[file_part + currentPoint];
+		varImgLabel[currentPoint] = psramLabel[file_part + currentPoint];
 
 		//load coordinates
 		/*
 		for (uint8_t i = 0; i < DIM; i++)
 			varImgCoor[block_part + currentPoint][i] = psramCoor[file_part + currentPoint][i];
 		*/
-		memcpy(varImgCoor[block_part + currentPoint], psramCoor[file_part + currentPoint], DIM);
+		memcpy(varImgCoor[currentPoint], psramCoor[file_part + currentPoint], DIM);
 		
 		//load cluster
-		varImgCluster[block_part + currentPoint] = psramCluster[file_part + currentPoint];
+		varImgCluster[currentPoint] = psramCluster[file_part + currentPoint];
 	}
 }
 #else
-void readPoints(char * path, uint16_t file_number, uint8_t block) {
+void readPoints(char * path, uint16_t file_number) {
 
 	//Points are always read in the same variables for image (varImgCoor[NUM_OF_POINTS_PER_FILE][DIM], varImgCluster[NUM_OF_POINTS_PER_FILE], 
 	//varImgLabel[NUM_OF_POINTS_PER_FILE])
 	//but there are two blocks, for two threads
 
-	#ifdef DATASET_ON_FLASH
-	char new_path[50]; 
-	sprintf(new_path, "/spiffs%s_%d.bin", path, (int)file_number);
-	FILE* f = fopen(new_path, "rb");
-    if (f == NULL) {
-        ESP_LOGE(TAG, "Failed to open file for reading");
-        return;
-    }
-	#endif
-	#ifdef DATASET_ON_SD
-	char new_path[50]; 
-	sprintf(new_path, "/sdcard%s_%d.bin", path, (int)file_number);
-	FILE* f = fopen(new_path, "rb");
-    if (f == NULL) {
-        ESP_LOGE(TAG, "Failed to open file for reading");
-        return;
-    }
-	#endif
-
-	uint16_t block_part = block * NUM_OF_POINTS_PER_FILE;
-
-	//iterate over 1 file with 'NUM_OF_POINTS_PER_FILE' points
-	for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
-		//read label
-		fread(&varImgLabel[block_part + currentPoint], 1, 1, f);
-
-		//read coordinates
-		fread(varImgCoor[block_part + currentPoint], 1, DIM, f);
-
-		//read cluster
-		fread(&varImgCluster[block_part + currentPoint], 1, 1, f);
-
-		#ifdef PRINT_FILES
-		printf("Point %d from file %d:\n", currentPoint, file_number);
-		printf("%d ", varImgLabel[block_part + currentPoint]);
-		for (int i = 0 ; i < DIM; i++)
-			printf("%d ", varImgCoor[block_part + currentPoint][i]);
-		printf("%d \n\n", varImgCluster[block_part + currentPoint]);
+	for (uint8_t fn = 0; fn < 2; fn++) {
+		#ifdef DATASET_ON_FLASH
+		char new_path[50]; 
+		sprintf(new_path, "/spiffs%s_%d.bin", path, (int)file_number + fn);
+		FILE* f = fopen(new_path, "rb");
+		if (f == NULL) {
+			ESP_LOGE(TAG, "Failed to open file for reading");
+			return;
+		}
 		#endif
-	}
+		#ifdef DATASET_ON_SD
+		char new_path[50]; 
+		sprintf(new_path, "/sdcard%s_%d.bin", path, (int)file_number + fn);
+		FILE* f = fopen(new_path, "rb");
+		if (f == NULL) {
+			ESP_LOGE(TAG, "Failed to open file for reading");
+			return;
+		}
+		#endif
 
-	fclose(f);
+		uint16_t block_part = fn * NUM_OF_POINTS_PER_FILE;
+
+		//iterate over 1 file with 'NUM_OF_POINTS_PER_FILE' points
+		for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
+			//read label
+			fread(&varImgLabel[block_part + currentPoint], 1, 1, f);
+
+			//read coordinates
+			fread(varImgCoor[block_part + currentPoint], 1, DIM, f);
+
+			//read cluster
+			fread(&varImgCluster[block_part + currentPoint], 1, 1, f);
+
+			#ifdef PRINT_FILES
+			printf("Point %d from file %d:\n", currentPoint, file_number);
+			printf("%d ", varImgLabel[block_part + currentPoint]);
+			for (int i = 0 ; i < DIM; i++)
+				printf("%d ", varImgCoor[block_part + currentPoint][i]);
+			printf("%d \n\n", varImgCluster[block_part + currentPoint]);
+			#endif
+		}
+
+		fclose(f);
+	}
 }
 #endif
 
 #ifdef DATASET_IN_PSRAM
-void storePoints(uint16_t file_number, uint8_t block) {
-	uint16_t block_part = block * NUM_OF_POINTS_PER_FILE;
+void storePoints(uint16_t file_number) {
 	uint16_t file_part = file_number * NUM_OF_POINTS_PER_FILE;
 
-	for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
+	for (uint16_t currentPoint = 0; currentPoint < (NUM_OF_POINTS_PER_FILE * 2); currentPoint++) {
 		//store label
-		psramLabel[file_part + currentPoint] = varImgLabel[block_part + currentPoint];
+		psramLabel[file_part + currentPoint] = varImgLabel[currentPoint];
 
 		//store coordinates
 		/*
 		for (uint8_t i = 0; i < DIM; i++)
 			psramCoor[file_part + currentPoint][i] = varImgCoor[block_part + currentPoint][i];
 		*/
-		memcpy(psramCoor[file_part + currentPoint], varImgCoor[block_part + currentPoint], DIM);
+		memcpy(psramCoor[file_part + currentPoint], varImgCoor[currentPoint], DIM);
 		
 		//store cluster
-		psramCluster[file_part + currentPoint] = varImgCluster[block_part + currentPoint];
+		psramCluster[file_part + currentPoint] = varImgCluster[currentPoint];
 	}
 }	
 #else
-void writePoints(char * path, uint16_t file_number, uint8_t block) {
+void writePoints(char * path, uint16_t file_number) {
 
-	#ifdef DATASET_ON_FLASH
-	char new_path[50]; 
-	sprintf(new_path, "/spiffs%s_%d.bin", path, (int)file_number);
-	FILE* f = fopen(new_path, "wb");
-    if (f == NULL) {
-        ESP_LOGE(TAG, "Failed to open file for writing");
-        return;
-    }
-	#endif
-	#ifdef DATASET_ON_SD
-	char new_path[50]; 
-	sprintf(new_path, "/sdcard%s_%d.bin", path, (int)file_number);
-	FILE* f = fopen(new_path, "wb");
-    if (f == NULL) {
-        ESP_LOGE(TAG, "Failed to open file for writing");
-        return;
-    }
-	#endif
-			
-	uint16_t block_part = block * NUM_OF_POINTS_PER_FILE;
+	for (uint8_t fn = 0; fn < 2; fn++) {
+		#ifdef DATASET_ON_FLASH
+		char new_path[50]; 
+		sprintf(new_path, "/spiffs%s_%d.bin", path, (int)file_number + fn);
+		FILE* f = fopen(new_path, "wb");
+		if (f == NULL) {
+			ESP_LOGE(TAG, "Failed to open file for writing");
+			return;
+		}
+		#endif
+		#ifdef DATASET_ON_SD
+		char new_path[50]; 
+		sprintf(new_path, "/sdcard%s_%d.bin", path, (int)file_number + fn);
+		FILE* f = fopen(new_path, "wb");
+		if (f == NULL) {
+			ESP_LOGE(TAG, "Failed to open file for writing");
+			return;
+		}
+		#endif
+				
+		uint16_t block_part = fn * NUM_OF_POINTS_PER_FILE;
 
-	// Reset file position to beginning (FILE_WRITE opens at the end of the file)
-    fseek(f, 0, SEEK_SET);
+		// Reset file position to beginning (FILE_WRITE opens at the end of the file)
+		fseek(f, 0, SEEK_SET);
 
-	//iterate over 1 file with 'NUM_OF_POINTS_PER_FILE' points
-	for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
-		//write label
-		fwrite(&varImgLabel[block_part + currentPoint], 1, 1, f);
+		//iterate over 1 file with 'NUM_OF_POINTS_PER_FILE' points
+		for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
+			//write label
+			fwrite(&varImgLabel[block_part + currentPoint], 1, 1, f);
 
-		//write coordinates
-		fwrite(varImgCoor[block_part + currentPoint], 1, DIM, f);
+			//write coordinates
+			fwrite(varImgCoor[block_part + currentPoint], 1, DIM, f);
 
-		//write cluster
-		fwrite(&varImgCluster[block_part + currentPoint], 1, 1, f);
+			//write cluster
+			fwrite(&varImgCluster[block_part + currentPoint], 1, 1, f);
 
-		/*
-		fwrite(writeData, 1, DIM+2, f);  // Write all bytes of point at once
-		*/
+			/*
+			fwrite(writeData, 1, DIM+2, f);  // Write all bytes of point at once
+			*/
+		}
+
+		fclose(f);
 	}
-
-	fclose(f);
 }
 #endif
 /*
@@ -468,7 +470,6 @@ pthread_mutex_t mutexSum;
 static void *processDataFile(void * arg)
 {
     uint8_t file_iterator = *(uint8_t *) arg;
-	free(arg);
 
 	//if file iterator is even number (0, 2...) first blocks of varImg arrays are used
 	//otherwise (1, 3...), second blocks
@@ -478,13 +479,6 @@ static void *processDataFile(void * arg)
 	int dist; 					//used for distance function
 	int minDist;				//used for tracking minimal distance for current point
 	uint8_t clusterId;			//used for sum and nPoints arrays
-
-	//load 'NUM_OF_POINTS_PER_FILE' images
-	#ifdef DATASET_IN_PSRAM
-	loadPoints(file_iterator, block);
-	#else
-	readPoints(bin_train, file_iterator, block);
-	#endif
 
 	for (uint16_t file_point_iterator = 0; file_point_iterator < NUM_OF_POINTS_PER_FILE; file_point_iterator++) {
 		//For each image, calculate which cluster is the closest
@@ -508,13 +502,6 @@ static void *processDataFile(void * arg)
 		}
 		pthread_mutex_unlock(&mutexSum);
 	}
-
-	//store 'NUM_OF_POINTS_PER_FILE' images
-	#ifdef DATASET_IN_PSRAM
-	storePoints(file_iterator, block);
-	#else
-	writePoints(bin_train, file_iterator, block); 
-	#endif
 
     return NULL;
 }
@@ -588,14 +575,24 @@ void kMeansClustering()
 		//working with the NUM_OF_POINTS_PER_FILE points.
 		//The only independences are nPoints and sum arrays
 
+		uint8_t* file_iterator1 = malloc(sizeof(uint8_t));
+		uint8_t* file_iterator2 = malloc(sizeof(uint8_t));
+
 		for (uint8_t i = 0; i < NUM_OF_FILES; i += 2) {
+
+			//load 'NUM_OF_POINTS_PER_FILE' images
+			#ifdef DATASET_IN_PSRAM
+			//loadPoints(file_iterator, block);
+			loadPoints(i);
+			#else
+			readPoints(bin_train, i);
+			#endif
+
 			//Using two threads (Dual core processor)
 			pthread_t thread1, thread2;
 			pthread_mutex_init(&mutexSum, NULL);
 
-			uint8_t* file_iterator1 = malloc(sizeof(uint8_t));
         	*file_iterator1 = i;
-			uint8_t* file_iterator2 = malloc(sizeof(uint8_t));
         	*file_iterator2 = i + 1;
 
 			if (pthread_create(&thread1, NULL, processDataFile, (void *)file_iterator1) != 0) {
@@ -612,7 +609,18 @@ void kMeansClustering()
 				perror("Failed to join thread");
 			}
 			pthread_mutex_destroy(&mutexSum);
+
+			//store 'NUM_OF_POINTS_PER_FILE' images
+			#ifdef DATASET_IN_PSRAM
+			//storePoints(file_iterator, block);
+			storePoints(i);
+			#else
+			writePoints(bin_train, i); 
+			#endif
 		}
+
+		free(file_iterator1);
+		free(file_iterator2);
 
 		// Compute the new centroids using sum arrays
 		for (uint8_t c = 0; c < K; c++) 
@@ -879,6 +887,11 @@ void app_main(void)
 	//Training
 	//Execute k-means algorithm
 	kMeansClustering(); 
+
+//Finish measuring time
+uint64_t end_time = esp_timer_get_time();
+printf("Training finished.\n");
+printf("Time spent: %llu microseconds (%llu seconds).\n", end_time - start_time, (end_time - start_time)/1000000); 
 /*
     //Calculate which cluster is which number (result is in label_clust array)
 	assignLabelToCluster();
