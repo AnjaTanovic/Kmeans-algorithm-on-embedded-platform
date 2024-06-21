@@ -468,9 +468,15 @@ uint8_t predict(uint8_t point)
 pthread_mutex_t mutexSum;
 
 static void *processDataFile(void * arg)
-{
-    uint8_t file_iterator = *(uint8_t *) arg;
+{  
+	vTaskDelay(10/portTICK_PERIOD_MS);
+	uint8_t file_iterator = *(uint8_t *) arg;
 
+	#ifdef DEBUG
+	int core_id = xPortGetCoreID();  // Get the ID of the core running this task
+	printf("Running on core %d (part %d)\n", core_id, file_iterator);
+	#endif
+	
 	//if file iterator is even number (0, 2...) first blocks of varImg arrays are used
 	//otherwise (1, 3...), second blocks
 	uint8_t block = file_iterator % 2;
