@@ -19,9 +19,11 @@
 
 #include <string.h>
 
+/*
 #include <unistd.h>
 #include <pthread.h>
 #include "esp_pthread.h"
+*/
 
 #define DEBUG
 #define TEST_SEED
@@ -29,9 +31,9 @@
 //#define PRINT_FILES
 
 //Define only one case!!!
-#define DATASET_ON_FLASH
+//#define DATASET_ON_FLASH
 //#define DATASET_ON_SD
-//#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
+#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
 							//results are stored on flash (for potential later usage)
 							//flash is used because it saves data during sleep
 
@@ -465,11 +467,13 @@ uint8_t predict(uint8_t point)
 	return varImgLabel[point];
 }
 
-pthread_mutex_t mutexSum;
+SemaphoreHandle_t mutexSum;
+SemaphoreHandle_t taskCompleteSemaphore1;
+SemaphoreHandle_t taskCompleteSemaphore2;
 
-static void *processDataFile(void * arg)
+static void processDataFile(void * arg)
 {  
-	vTaskDelay(10/portTICK_PERIOD_MS);
+	//vTaskDelay(10/portTICK_PERIOD_MS);
 	uint8_t file_iterator = *(uint8_t *) arg;
 
 	#ifdef DEBUG
@@ -500,16 +504,23 @@ static void *processDataFile(void * arg)
 		}
 
 		clusterId = varImgCluster[block_part + file_point_iterator];
-		pthread_mutex_lock(&mutexSum);
+		xSemaphoreTake(mutexSum, portMAX_DELAY);
 		nPoints[clusterId] += 1;
 		for (int coor = 0; coor < DIM; coor++)
 		{
 			sum[coor][clusterId] += varImgCoor[block_part + file_point_iterator][coor];
 		}
-		pthread_mutex_unlock(&mutexSum);
+		xSemaphoreGive(mutexSum);
 	}
 
-    return NULL;
+    // Signal that the task is complete
+    if (file_iterator % 2 == 0) {
+        xSemaphoreGive(taskCompleteSemaphore1);
+    } else {
+        xSemaphoreGive(taskCompleteSemaphore2);
+    }
+
+    vTaskDelete(NULL);  // Delete the task when done
 }
 
 void kMeansClustering()
@@ -581,6 +592,23 @@ void kMeansClustering()
 		//working with the NUM_OF_POINTS_PER_FILE points.
 		//The only independences are nPoints and sum arrays
 
+		// Initialize the mutex (mutex starts in the available state)
+		mutexSum = xSemaphoreCreateMutex();
+
+		if (mutexSum == NULL) {
+			printf("Mutex creation failed\n");
+			return;
+		}
+
+		// Initialize semaphores (semaphore starts in the unavailable state)
+		taskCompleteSemaphore1 = xSemaphoreCreateBinary();	
+		taskCompleteSemaphore2 = xSemaphoreCreateBinary();
+
+		if (taskCompleteSemaphore1 == NULL || taskCompleteSemaphore2 == NULL) {
+			printf("Semaphore creation failed\n");
+			return;
+		}
+
 		uint8_t* file_iterator1 = malloc(sizeof(uint8_t));
 		uint8_t* file_iterator2 = malloc(sizeof(uint8_t));
 
@@ -594,27 +622,17 @@ void kMeansClustering()
 			readPoints(bin_train, i);
 			#endif
 
-			//Using two threads (Dual core processor)
-			pthread_t thread1, thread2;
-			pthread_mutex_init(&mutexSum, NULL);
-
         	*file_iterator1 = i;
         	*file_iterator2 = i + 1;
 
-			if (pthread_create(&thread1, NULL, processDataFile, (void *)file_iterator1) != 0) {
-				perror("Failed to create thread");
-			}
-			if (pthread_create(&thread2, NULL, processDataFile, (void *)file_iterator2) != 0) {
-				perror("Failed to create thread");
-			}
+			//Using two threads (Dual core processor)
+			// Create FreeRTOS tasks pinned to specific cores
+			xTaskCreatePinnedToCore(processDataFile, "TaskCore0", 2048, (void *)file_iterator1, 1, NULL, 0);
+			xTaskCreatePinnedToCore(processDataFile, "TaskCore1", 2048, (void *)file_iterator2, 1, NULL, 1);
 
-			if (pthread_join(thread1, NULL) != 0) {
-				perror("Failed to join thread");
-			}
-			if (pthread_join(thread2, NULL) != 0) {
-				perror("Failed to join thread");
-			}
-			pthread_mutex_destroy(&mutexSum);
+			 // Wait for the tasks to complete
+			xSemaphoreTake(taskCompleteSemaphore1, portMAX_DELAY);
+			xSemaphoreTake(taskCompleteSemaphore2, portMAX_DELAY);
 
 			//store 'NUM_OF_POINTS_PER_FILE' images
 			#ifdef DATASET_IN_PSRAM
@@ -627,6 +645,10 @@ void kMeansClustering()
 
 		free(file_iterator1);
 		free(file_iterator2);
+		// Destroy the mutex and semaphores
+		vSemaphoreDelete(mutexSum);
+		vSemaphoreDelete(taskCompleteSemaphore1);
+		vSemaphoreDelete(taskCompleteSemaphore2);
 
 		// Compute the new centroids using sum arrays
 		for (uint8_t c = 0; c < K; c++) 
