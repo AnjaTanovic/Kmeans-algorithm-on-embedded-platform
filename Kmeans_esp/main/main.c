@@ -340,55 +340,81 @@ void writePoints(char * path, uint16_t file_number) {
 
 void assignLabelToCluster()
 {
-	uint16_t label_num[K];   //contains the number of label occurence in one cluster
+	uint16_t **label_num;   //contains the number of label occurence for each cluster
+							//2D array where the highest value in each column
+							//corresponds to real label value for each cluster
+							//Dimensions: [10][K]
+									
+	// Allocate memory for the array of pointers
+	label_num = (uint16_t **)malloc(10 * sizeof(uint16_t *));
+    if (label_num == NULL) {
+        // Handle memory allocation failure
+		printf("Not enough memory for label_num array\n");
+        return;
+    }
+    // Allocate memory for each row (array of uint16_t)
+    for (int i = 0; i < 10; i++) {
+        label_num[i] = (uint16_t *)malloc(K * sizeof(uint16_t));
+        if (label_num[i] == NULL) {
+            // Handle memory allocation failure
+			printf("Not enough memory for label_num array\n");
+            return;
+        }
+    }
+
 	uint16_t file_iterator;
 	uint8_t file_point_iterator;	
 
-	for (uint8_t i = 0; i < K; i++)
+	//Initialization of 2D array
+	for (uint8_t i = 0; i < 10; i++)
 	{
-		//Initialization of label numbers
 		for (uint8_t j = 0; j < K; j++)
-		{
-			label_num[j] = 0;
-		}
-
-		file_iterator = 0;
-		//load first 'NUM_OF_POINTS_PER_FILE' images
-		#ifdef DATASET_IN_PSRAM
-		loadPoints(file_iterator);
-		#else
-		readPoints(bin_train, file_iterator);
-		#endif
-		//Counting labels for cluster i	
-		for (uint16_t j = 0; j < n; j++)
-		{
-			file_point_iterator = j % NUM_OF_POINTS_PER_FILE;	
-			if (file_point_iterator == 0 && j != 0) {
-				file_iterator++;
-				//load next 'NUM_OF_POINTS_PER_FILE' images
-				#ifdef DATASET_IN_PSRAM
-				loadPoints(file_iterator);
-				#else
-				readPoints(bin_train, file_iterator);
-				#endif
-			}
-			
-			if (varImgCluster[file_point_iterator] == i)
-				label_num[varImgLabel[file_point_iterator]] += 1; 
-		}
-
-		//The most numerous label becomes a cluster reprezentation number from range (1,10)
-		uint16_t max = label_num[0];
-		label_clust[i] = 0;
-		for (uint8_t j = 0; j < K; j++)
-		{
-			if (label_num[j] > max)
-			{
-				max = label_num[j];
-				label_clust[i] = j;
-			}
-		}
+			label_num[i][j] = 0;
 	}
+
+	file_iterator = 0;
+	//load first 'NUM_OF_POINTS_PER_FILE' images
+	#ifdef DATASET_IN_PSRAM
+	loadPoints(file_iterator);
+	#else
+	readPoints(bin_train, file_iterator);
+	#endif
+	//Counting labels for clusters
+	for (uint16_t j = 0; j < n; j++)
+	{
+		file_point_iterator = j % NUM_OF_POINTS_PER_FILE;	
+		if (file_point_iterator == 0 && j != 0) {
+			file_iterator++;
+			//load next 'NUM_OF_POINTS_PER_FILE' images
+			#ifdef DATASET_IN_PSRAM
+			loadPoints(file_iterator);
+			#else
+			readPoints(bin_train, file_iterator);
+			#endif
+		}
+		//fill 2D array
+		label_num[varImgLabel[file_point_iterator]][varImgCluster[file_point_iterator]] += 1; 
+	}
+
+	//The most numerous label in each column becomes a cluster reprezentation number from range (0,9)
+	//Results are in label_clust 1D array
+	for (uint8_t col = 0; col < K; col++) {
+		uint16_t max = label_num[0][col];
+		label_clust[col] = 0;
+		for (uint8_t row = 1; row < 10; row++) {
+			if (label_num[row][col] > max)
+			{
+				max = label_num[row][col];
+				label_clust[col] = row;
+			}
+		}
+	}	
+
+	// Free memory
+    for (int i = 0; i < 10; i++) {
+        free(label_num[i]); // Free memory for each row
+    }
+    free(label_num); // Free memory for the array of pointers
 }
 
 double calculateTrainingAccuracy()
@@ -722,7 +748,12 @@ void kMeansClustering()
 		printf("%%.\n"); 
 		#endif
 	}
-	
+
+	// Free memory
+    for (int i = 0; i < DIM; i++) {
+        free(sum[i]); // Free memory for each row
+    }
+    free(sum); // Free memory for the array of pointers
 }
 
 void app_main(void)
@@ -949,6 +980,8 @@ void app_main(void)
 
 	#ifdef DATASET_ON_SD
 	//Testing
+	printf("TESTING STARTED.\n");
+
 	n = TEST_NUM;
 	uint8_t predicted_number;
 	uint8_t original_number;
@@ -1034,12 +1067,6 @@ void app_main(void)
 	fclose(f);
 	#endif
 	#endif
-
-	// Free memory
-    for (int i = 0; i < DIM; i++) {
-        free(sum[i]); // Free memory for each row
-    }
-    free(sum); // Free memory for the array of pointers
 
     #ifdef DATASET_ON_FLASH
     // All done, unmount partition and disable SPIFFS
