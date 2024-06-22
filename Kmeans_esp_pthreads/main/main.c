@@ -630,7 +630,7 @@ void kMeansClustering()
 			xTaskCreatePinnedToCore(processDataFile, "TaskCore0", 2048, (void *)file_iterator1, 1, NULL, 0);
 			xTaskCreatePinnedToCore(processDataFile, "TaskCore1", 2048, (void *)file_iterator2, 1, NULL, 1);
 
-			 // Wait for the tasks to complete
+			// Wait for the tasks to complete
 			xSemaphoreTake(taskCompleteSemaphore1, portMAX_DELAY);
 			xSemaphoreTake(taskCompleteSemaphore2, portMAX_DELAY);
 
