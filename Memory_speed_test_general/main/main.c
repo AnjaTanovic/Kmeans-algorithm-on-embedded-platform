@@ -41,8 +41,8 @@ static const char *TAG_sd = "SD";
 //ESP32 uses a two-way set-associative cache. Each of the two CPUs has 32 KB of cache featuring a block
 //size of 32 bytes for accessing external storage
 
-#define CHUNK_SIZE 10000L
-#define NUM_OF_BYTES_IN_FILE 100000
+#define CHUNK_SIZE 131072L   //64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072 //max 128KB
+#define NUM_OF_BYTES_IN_FILE 1048576L //1024KB
 
 //buffer in internal RAM
 uint8_t buffer[CHUNK_SIZE];				
@@ -210,7 +210,7 @@ void testPSRAM() {
 
     //Fill arrays in PSRAM with random data
     for (uint32_t i = 0; i < NUM_OF_BYTES_IN_FILE/CHUNK_SIZE; i++) {
-        for (uint16_t j = 0; j < CHUNK_SIZE; j++)
+        for (uint32_t j = 0; j < CHUNK_SIZE; j++)
             psramBuffer[i][j] = j;
     }
 
@@ -232,7 +232,7 @@ void testPSRAM() {
 
         //read chunk size
         /*
-        for (uint16_t i = 0; i < CHUNK_SIZE; i++)
+        for (uint32_t i = 0; i < CHUNK_SIZE; i++)
            buffer[i] = psramBuffer[size][i];
         */
         memcpy(buffer, psramBuffer[size], CHUNK_SIZE);
@@ -256,7 +256,7 @@ void testPSRAM() {
 
         //write chunk size
         /*
-        for (uint16_t i = 0; i < CHUNK_SIZE; i++)
+        for (uint32_t i = 0; i < CHUNK_SIZE; i++)
             psramBuffer[size][i] = buffer[i];
         */
         memcpy(psramBuffer[size], buffer, CHUNK_SIZE);

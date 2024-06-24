@@ -1,6 +1,6 @@
 import os
 
-num_of_bytes = 100000
+num_of_bytes = 131072
 # Generate random bytes
 random_bytes = os.urandom(num_of_bytes)
 
