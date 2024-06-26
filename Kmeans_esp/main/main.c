@@ -19,15 +19,15 @@
 
 #include <string.h>
 
-#define DEBUG
+//#define DEBUG
 #define TEST_SEED
 //#define CALC_ACC_BETWEEN_ITERATIONS
 //#define PRINT_FILES
 
 //Define only one case!!!
 //#define DATASET_ON_FLASH
-//#define DATASET_ON_SD
-#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
+#define DATASET_ON_SD
+//#define DATASET_IN_PSRAM	//dataset is initially on flash, and loaded in psram
 							//results are stored on flash (for potential later usage)
 							//flash is used because it saves data during sleep
 
@@ -41,11 +41,11 @@ static const char *TAG = "SD";
 static const char *TAG = "FileSystem";
 #endif
 
-#define TRAIN_NUM 10000		//number of training images (1000, 2000, 4000, 6000, 8000, 10000)
+#define TRAIN_NUM 1000		//number of training images (1000, 2000, 4000, 6000, 8000, 10000)
 #define TEST_NUM 10000		//number of test images
 #define DIM 196				//number of dimensions
 
-#define K 200				//number of clusters (10, 50, 100, 150, 200, 250)
+#define K 50				//number of clusters (10, 50, 100, 150, 200, 250)
 /*
 K is number of clusters (	1.option - defined as macro,
 							2.option - defined as max, for example 500
@@ -715,10 +715,9 @@ void kMeansClustering()
 
 		if (changed == false)    //Check if kmeans algorithm has converged
 		{
-			#ifdef DEBUG
 			printf("Kmeans algorithm has converged. Total number of iterations: ");
       		printf("%d\n",iter);
-			#endif
+			
 			// Yield control to other tasks (scheduler tasks, IDLE task...)
         	vTaskDelay(10 / portTICK_PERIOD_MS);	//10 ms delay (default tick period is 10ms, so any delay of less than 10ms results in a 0 delay) 
 
@@ -726,10 +725,9 @@ void kMeansClustering()
 		}
 		if (iter == EPOCHS - 1)
 		{
-			#ifdef DEBUG
 			printf("Kmeans algorithm has reached maximum number of iterations, but not converged. Total number of iterations: ");
       		printf("%d\n", iter + 1);
-			#endif
+			
 			changed = false; //ending for loop
 
 			// Yield control to other tasks (scheduler tasks, IDLE task...)
@@ -969,7 +967,7 @@ void app_main(void)
 	//Finish measuring time
 	uint64_t end_time = esp_timer_get_time();
 	printf("Training finished.\n");
-    printf("Time spent: %llu microseconds (%llu seconds).\n", end_time - start_time, (end_time - start_time)/1000000); 
+    printf("Time spent: %llu microseconds (%.6lf seconds).\n", end_time - start_time, (double)(end_time - start_time)/1000000); 
 	
 	//Calculate accuracy between true labels and kmeans labels
 	double accuracy = calculateTrainingAccuracy();
