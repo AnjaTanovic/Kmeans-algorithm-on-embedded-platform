@@ -53,7 +53,7 @@ static const char *TAG = "FileSystem";
 #define TEST_NUM 10000		//number of test images
 #define DIM 196				//number of dimensions
 
-#define K 200				//number of clusters (10, 50, 100, 150, 200, 250)
+#define K 10				//number of clusters (10, 50, 100, 150, 200, 250)
 /*
 K is number of clusters (	1.option - defined as macro,
 							2.option - defined as max, for example 500
