@@ -41,11 +41,11 @@ static const char *TAG = "SD";
 static const char *TAG = "FileSystem";
 #endif
 
-#define TRAIN_NUM 10000		//number of training images (1000, 2000, 4000, 6000, 8000, 10000)
+#define TRAIN_NUM 2000		//number of training images (1000, 2000, 4000, 6000, 8000, 10000)
 #define TEST_NUM 10000		//number of test images
 #define DIM 196				//number of dimensions
 
-#define K 200				//number of clusters (10, 50, 100, 150, 200, 250)
+#define K 10				//number of clusters (10, 50, 100, 150, 200, 250)
 /*
 K is number of clusters (	1.option - defined as macro,
 							2.option - defined as max, for example 500
@@ -59,7 +59,7 @@ EPOCHS is max number of iterations (1.option - defined as macro,
 */
 	
 uint16_t n = 0; 					//number of points (used for both training and testing)
-#define NUM_OF_FILES 40				//number of files with data (4, 8, 16, 24, 32, 40)
+#define NUM_OF_FILES 8				//number of files with data (4, 8, 16, 24, 32, 40)
 #define NUM_OF_POINTS_PER_FILE 250	//number of points stored in file
 //const uint16_t num_of_bytes_per_point = 1 + DIM + 1;  	//number of bytes per point (1 for label, 
 															//DIM for img pixels, 1 for cluster) 

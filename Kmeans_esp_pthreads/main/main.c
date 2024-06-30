@@ -37,6 +37,8 @@
 							//results are stored on flash (for potential later usage)
 							//flash is used because it saves data during sleep
 
+#define TESTING_ON_SD		//testing is always on SD card
+
 #ifdef DATASET_ON_FLASH
 static const char *TAG = "FileSystem";
 #endif
@@ -47,11 +49,11 @@ static const char *TAG = "SD";
 static const char *TAG = "FileSystem";
 #endif
 
-#define TRAIN_NUM 10000		//number of training images (1000, 2000, 4000, 6000, 8000, 10000)
+#define TRAIN_NUM 1000		//number of training images (1000, 2000, 4000, 6000, 8000, 10000)
 #define TEST_NUM 10000		//number of test images
 #define DIM 196				//number of dimensions
 
-#define K 250				//number of clusters (10, 50, 100, 150, 200, 250)
+#define K 200				//number of clusters (10, 50, 100, 150, 200, 250)
 /*
 K is number of clusters (	1.option - defined as macro,
 							2.option - defined as max, for example 500
@@ -65,7 +67,7 @@ EPOCHS is max number of iterations (1.option - defined as macro,
 */
 	
 uint16_t n = 0; 					//number of points (used for both training and testing)
-#define NUM_OF_FILES 40				//number of files with data (4, 8, 16, 24, 32, 40)
+#define NUM_OF_FILES 4				//number of files with data (4, 8, 16, 24, 32, 40)
 #define NUM_OF_POINTS_PER_FILE 250	//number of points stored in file
 //const uint16_t num_of_bytes_per_point = 1 + DIM + 1;  	//number of bytes per point (1 for label, 
 															//DIM for img pixels, 1 for cluster) 
@@ -80,11 +82,14 @@ char bin_train[] = "/img";
 #endif
 #ifdef DATASET_ON_SD
 char bin_train[] = "/train/img";
-char bin_test[] = "/test/img";
 #endif
 #ifdef DATASET_IN_PSRAM
 char bin_train[] = "/img";
 #endif
+
+#ifdef TESTING_ON_SD
+char bin_test[] = "/test/img";
+#endif 
 
 char result_path[] = "/result";
 char result[50]; 
@@ -261,6 +266,49 @@ void readPoints(char * path, uint16_t file_number) {
 			return;
 		}
 		#endif
+
+		uint16_t block_part = fn * NUM_OF_POINTS_PER_FILE;
+
+		//iterate over 1 file with 'NUM_OF_POINTS_PER_FILE' points
+		for (uint16_t currentPoint = 0; currentPoint < NUM_OF_POINTS_PER_FILE; currentPoint++) {
+			//read label
+			fread(&varImgLabel[block_part + currentPoint], 1, 1, f);
+
+			//read coordinates
+			fread(varImgCoor[block_part + currentPoint], 1, DIM, f);
+
+			//read cluster
+			fread(&varImgCluster[block_part + currentPoint], 1, 1, f);
+
+			#ifdef PRINT_FILES
+			printf("Point %d from file %d:\n", currentPoint, file_number);
+			printf("%d ", varImgLabel[block_part + currentPoint]);
+			for (int i = 0 ; i < DIM; i++)
+				printf("%d ", varImgCoor[block_part + currentPoint][i]);
+			printf("%d \n\n", varImgCluster[block_part + currentPoint]);
+			#endif
+		}
+
+		fclose(f);
+	}
+}
+#endif
+
+#ifdef TESTING_ON_SD
+void readPointsForTest(char * path, uint16_t file_number) {
+
+	//Points are always read in the same variables for image (varImgCoor[NUM_OF_POINTS_PER_FILE][DIM], varImgCluster[NUM_OF_POINTS_PER_FILE], 
+	//varImgLabel[NUM_OF_POINTS_PER_FILE])
+	//but there are two blocks, for two threads
+
+	for (uint8_t fn = 0; fn < 2; fn++) {
+		char new_path[50]; 
+		sprintf(new_path, "/sdcard%s_%d.bin", path, (int)file_number + fn);
+		FILE* f = fopen(new_path, "rb");
+		if (f == NULL) {
+			ESP_LOGE(TAG, "Failed to open file for reading");
+			return;
+		}
 
 		uint16_t block_part = fn * NUM_OF_POINTS_PER_FILE;
 
@@ -762,23 +810,23 @@ void app_main(void)
 
     // Use settings defined above to initialize and mount SPIFFS filesystem.
     // Note: esp_vfs_spiffs_register is an all-in-one convenience function.
-    esp_err_t ret = esp_vfs_spiffs_register(&conf);
+    esp_err_t ret_f = esp_vfs_spiffs_register(&conf);
 
-    if (ret != ESP_OK) {
-        if (ret == ESP_FAIL) {
+    if (ret_f != ESP_OK) {
+        if (ret_f == ESP_FAIL) {
             ESP_LOGE(TAG, "Failed to mount or format filesystem");
-        } else if (ret == ESP_ERR_NOT_FOUND) {
+        } else if (ret_f == ESP_ERR_NOT_FOUND) {
             ESP_LOGE(TAG, "Failed to find SPIFFS partition");
         } else {
-            ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
+            ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret_f));
         }
         return;
     }
 
     size_t total = 0, used = 0;
-    ret = esp_spiffs_info(conf.partition_label, &total, &used);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s). Formatting...", esp_err_to_name(ret));
+    ret_f = esp_spiffs_info(conf.partition_label, &total, &used);
+    if (ret_f != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s). Formatting...", esp_err_to_name(ret_f));
         esp_spiffs_format(conf.partition_label);
         return;
     } else {
@@ -788,11 +836,11 @@ void app_main(void)
     // Check consistency of reported partition size info.
     if (used > total) {
         ESP_LOGW(TAG, "Number of used bytes cannot be larger than total. Performing SPIFFS_check().");
-        ret = esp_spiffs_check(conf.partition_label);
+        ret_f = esp_spiffs_check(conf.partition_label);
         // Could be also used to mend broken files, to clean unreferenced pages, etc.
         // More info at https://github.com/pellepl/spiffs/wiki/FAQ#powerlosses-contd-when-should-i-run-spiffs_check
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "SPIFFS_check() failed (%s)", esp_err_to_name(ret));
+        if (ret_f != ESP_OK) {
+            ESP_LOGE(TAG, "SPIFFS_check() failed (%s)", esp_err_to_name(ret_f));
             return;
         } else {
             ESP_LOGI(TAG, "SPIFFS_check() successful");
@@ -843,23 +891,23 @@ void app_main(void)
 
     // Use settings defined above to initialize and mount SPIFFS filesystem.
     // Note: esp_vfs_spiffs_register is an all-in-one convenience function.
-    esp_err_t ret = esp_vfs_spiffs_register(&conf);
+    esp_err_t ret_f = esp_vfs_spiffs_register(&conf);
 
-    if (ret != ESP_OK) {
-        if (ret == ESP_FAIL) {
+    if (ret_f != ESP_OK) {
+        if (ret_f == ESP_FAIL) {
             ESP_LOGE(TAG, "Failed to mount or format filesystem");
-        } else if (ret == ESP_ERR_NOT_FOUND) {
+        } else if (ret_f == ESP_ERR_NOT_FOUND) {
             ESP_LOGE(TAG, "Failed to find SPIFFS partition");
         } else {
-            ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
+            ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret_f));
         }
         return;
     }
 
     size_t total = 0, used = 0;
-    ret = esp_spiffs_info(conf.partition_label, &total, &used);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s). Formatting...", esp_err_to_name(ret));
+    ret_f = esp_spiffs_info(conf.partition_label, &total, &used);
+    if (ret_f != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s). Formatting...", esp_err_to_name(ret_f));
         esp_spiffs_format(conf.partition_label);
         return;
     } else {
@@ -869,11 +917,11 @@ void app_main(void)
     // Check consistency of reported partition size info.
     if (used > total) {
         ESP_LOGW(TAG, "Number of used bytes cannot be larger than total. Performing SPIFFS_check().");
-        ret = esp_spiffs_check(conf.partition_label);
+        ret_f = esp_spiffs_check(conf.partition_label);
         // Could be also used to mend broken files, to clean unreferenced pages, etc.
         // More info at https://github.com/pellepl/spiffs/wiki/FAQ#powerlosses-contd-when-should-i-run-spiffs_check
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "SPIFFS_check() failed (%s)", esp_err_to_name(ret));
+        if (ret_f != ESP_OK) {
+            ESP_LOGE(TAG, "SPIFFS_check() failed (%s)", esp_err_to_name(ret_f));
             return;
         } else {
             ESP_LOGI(TAG, "SPIFFS_check() successful");
@@ -942,8 +990,39 @@ void app_main(void)
 	printf("%lf", 100*accuracy);
 	printf("%%.\n"); 
 
-	#ifdef DATASET_ON_SD
+	#ifdef TESTING_ON_SD
 	//Testing
+
+	#ifndef DATASET_ON_SD
+	//Init SD card if it is not already initialized
+  	ESP_LOGI(TAG, "Initializing SD card");
+
+    sdmmc_card_t *card;
+    const char mount_point[] = "/sdcard";
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+        .format_if_mount_failed = true,
+        .max_files = 5
+    };
+ 
+    ESP_LOGI(TAG, "Mounting filesystem");
+    esp_err_t ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
+
+    if (ret != ESP_OK) {
+        if (ret == ESP_FAIL) {
+            ESP_LOGE(TAG, "Failed to mount filesystem. "
+                     "If you want the card to be formatted, set the EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
+        } else {
+            ESP_LOGE(TAG, "Failed to initialize the card (%s). "
+                     "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
+        }
+        return;
+    }
+    ESP_LOGI(TAG, "Filesystem mounted");
+	#endif
+	
 	printf("TESTING STARTED.\n");
 
 	n = TEST_NUM;
@@ -953,7 +1032,7 @@ void app_main(void)
 
 	for (uint16_t file_iterator = 0; file_iterator < n/NUM_OF_POINTS_PER_FILE; file_iterator += 2) {
 		//load 2 * 'NUM_OF_POINTS_PER_FILE' images
-		readPoints(bin_test, file_iterator);
+		readPointsForTest(bin_test, file_iterator);
 
 		//Predict
 		for (uint16_t file_point_iterator = 0; file_point_iterator < NUM_OF_POINTS_PER_FILE * 2; file_point_iterator++)
@@ -970,6 +1049,13 @@ void app_main(void)
 	printf("* Accuracy for test set is ");
   	printf("%lf", 100*accuracy);
   	printf("%%.\n"); 
+
+	#ifndef DATASET_ON_SD
+	// All done, unmount sd card
+    esp_vfs_fat_sdcard_unmount(mount_point, card);
+    ESP_LOGI(TAG, "Card unmounted");
+	#endif
+
 	#endif
 	
 	//Store results (final centroids)
